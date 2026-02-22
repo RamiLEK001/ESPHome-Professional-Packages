@@ -1,0 +1,11 @@
+# Portal de conexión por Bluetooth (Improv) + WiFi
+# Solo para ESP32 / ESP32-C3 (no usar en ESP8266: no tiene BLE)
+# Incluir con: packages: portal_ble: !include configuracion_portal_BLE-WIFI.yaml
+
+esp32_improv:
+  authorizer: none
+
+improv_serial:
+
+web_server:
+  port: 80

@@ -1,0 +1,89 @@
+# ─────────────────────────────
+# SENSORES INTERNOS
+# ─────────────────────────────
+sensor:
+  # Tiempo encendido
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    id: uptime_s
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+
+  # Temperatura interna del chip 
+  - platform: internal_temperature
+    name: "${friendly_name} Temperatura Interna"
+    id: internal_temp
+    update_interval: 60s
+
+# ─────────────────────────────
+# TEXTO / INFO PARA HOME ASSISTANT
+# ─────────────────────────────
+text_sensor:
+
+  # Versión de ESPHome
+  - platform: version
+    name: "${friendly_name} Versión ESPHome"
+    hide_timestamp: true
+
+# ─────────────────────────────
+# DEEP SLEEP (para "apagar" el dispositivo)
+# ─────────────────────────────
+deep_sleep:
+  id: deep_sleep
+  run_duration: 0s       # lo controlamos solo por botón/acción
+  sleep_duration: 24h    # duración por defecto (no importa mucho si entras manualmente)
+
+# ─────────────────────────────
+# BOTONES / TEMPLATE BUTTONS
+# (aparecen en Home Assistant como botones de un solo disparo)
+# ─────────────────────────────
+button:
+  # Reiniciar dispositivo
+  - platform: restart
+    name: "${friendly_name} Reiniciar dispositivo"
+
+  # Reiniciar en modo seguro (sin cargar algunas cosas, útil si se cuelga)
+  - platform: safe_mode
+    name: "${friendly_name} Reiniciar en modo seguro"
+
+  # Factory reset (borra configuración almacenada por ESPHome)
+  - platform: factory_reset
+    name: "${friendly_name} Restablecer a fábrica"
+
+  # Botón para entrar en deep sleep (“apagar”)
+  - platform: template
+    name: "${friendly_name} Apagar (deep sleep)"
+    icon: "mdi:power"
+    on_press:
+      then:
+        - deep_sleep.enter: deep_sleep
+
+  # Botón para desconectar WiFi
+
+
+  # Botón para reconectar WiFi
+  - platform: template
+    name: "${friendly_name} Reconectar WiFi"
+    icon: "mdi:wifi-refresh"
+    on_press:
+      then:
+        - wifi.reconnect:
+
+  # Botón para olvidar/borrar credenciales WiFi guardadas
+  # (tras pulsarlo el dispositivo se quedará sin WiFi y usará el AP/captive portal)
+  - platform: template
+    name: "${friendly_name} Borrar credenciales WiFi"
+    icon: "mdi:wifi-cancel"
+    on_press:
+      then:
+        - lambda: |-
+            wifi::global_wifi_component->forget();
+
+# ─────────────────────────────
+# OPCIONAL: SWITCHES TIPO TOGGLE
+# (si prefieres "interruptores" en vez de botón momentáneo)
+# ─────────────────────────────
+switch:
+  # Interruptor para reiniciar (cuando lo pones en ON, se reinicia)
+  - platform: restart
+    name: "${friendly_name} Reiniciar (switch)"

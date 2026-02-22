@@ -1,0 +1,68 @@
+# =============================================================================
+# CONFIGURACIÓN BASE ESPHome — Elige UNA placa y los packages que correspondan
+# =============================================================================
+
+substitutions:
+  device_name: "mi_dispositivo"
+  friendly_name: "Mi Dispositivo"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+
+  # Descomenta la plataforma que uses y comenta la otra:
+  platform: ESP32
+  # platform: ESP8266
+
+# -----------------------------------------------------------------------------
+# PLACA: descomenta SOLO UNA de las tres opciones (comenta las otras dos)
+# -----------------------------------------------------------------------------
+
+# ----- OPCIÓN 1: ESP32 estándar (ESP32-DevKitC, NodeMCU-32S, etc.) -----
+# esp32:
+#   board: esp32dev
+#   framework:
+#     type: arduino
+
+# ----- OPCIÓN 2: ESP32-C3 Super Mini -----
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# ----- OPCIÓN 3: ESP8266 (D1 Mini, NodeMCU, etc.) -----
+# esp8266:
+#   board: d1_mini
+
+# -----------------------------------------------------------------------------
+# LOGGER, API, OTA
+# -----------------------------------------------------------------------------
+logger:
+
+debug:
+
+api:
+  encryption:
+    key: "zne8awswhGlxRT35XzBoF45jn/ajGMx3a3INO8G9i6c="
+  reconnect_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: "b8e77643c8db114d2533c1180f0d234a"
+
+captive_portal:
+
+# -----------------------------------------------------------------------------
+# LIBRERÍAS (packages) — las 4 YAML
+# - wifi: siempre
+# - portal_ble: solo ESP32/ESP32-C3 (BLE). Si placa = ESP8266, coméntalo.
+# - internos_esp32: solo ESP32/ESP32-C3. Si placa = ESP8266, coméntalo.
+# - internos_esp8266: solo ESP8266. Si placa = ESP32, coméntalo.
+# -----------------------------------------------------------------------------
+packages:
+  wifi: !include configuracion_wifi.yaml
+  portal_ble: !include configuracion_portal_BLE-WIFI.yaml
+  internos_esp32: !include base_esp32-version.yaml
+  # internos_esp8266: !include base_esp8266-version.yaml
+
