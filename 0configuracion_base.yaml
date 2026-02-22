@@ -63,6 +63,6 @@ captive_portal:
 packages:
   wifi: !include configuracion_wifi.yaml
   portal_ble: !include configuracion_portal_BLE-WIFI.yaml
-  internos_esp32: !include base_esp32-version.yaml
+  internos_esp32: !include lib_esp32-version.yaml
   # internos_esp8266: !include base_esp8266-version.yaml
 
