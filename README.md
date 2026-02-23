@@ -1,74 +1,39 @@
-# ESPHome Libraries & Packages
+# 📦 ESPHome Professional Packages
+**Paquetes modulares optimizados para ESP32/ESP8266 en Home Assistant**
 
-Colección de **paquetes reutilizables** para ESPHome. Configuraciones probadas y optimizadas para ESP32, ESP32-C3 y ESP8266.
+[![ESPHome](https://esphome.io/_images/logo-text.png)](https://esphome.io)
 
-## 📁 Estructura del repositorio
+Colección de **configuraciones probadas y estables** que solucionan problemas comunes:
+- ✅ Sin bucles de reinicio por pérdida de WiFi/API
+- ✅ Punto de acceso solo manual (AP_timeout: 0s) 
+- ✅ Monitoreo completo en Home Assistant
+- ✅ Provisioning BLE + Portal cautivo
+- ✅ LED integrado como indicador de estado
 
-├── configuración-base.yaml # Configuración esencial (API, OTA, logger)
-├── configuración-portal.yaml # Portal cautivo + WiFi básico
-├── configuración-wifi.yaml # WiFi robusto + AP manual
-├── esp32-wifi.yaml # WiFi específico ESP32
-├── lib_esp32-version.yaml # Framework ESP-IDF para ESP32/C3
-├── lib_esp8266-version.yaml # Framework Arduino para ESP8266
-└── README.md
+## 🚀 Instalación Rápida
 
-text
-
-## 🚀 Uso rápido
-
-### 1. ESP32-C3 Super Mini (recomendado)
+### 1. **Preparar secrets.yaml**
 ```yaml
-esphome:
-  name: ${device_name}
-
-packages:
-  - !include configuración-base.yaml
-  - !include configuración-wifi.yaml  
-  - !include lib_esp32-version.yaml
-2. ESP8266 (NodeMCU, Wemos, etc.)
-text
-esphome:
-  name: ${device_name}
-
-packages:
-  - !include configuración-base.yaml
-  - !include configuración-wifi.yaml
-  - !include lib_esp8266-version.yaml
-📋 Contenido de cada paquete
-Archivo	✅ Incluye	🎯 Para
-configuración-base.yaml	Logger, API (reboot_timeout: 0s), OTA, captive_portal	Todos
-configuración-wifi.yaml	WiFi estable, AP manual (ap_timeout: 0s), reboot_timeout: 0s	Todos
-lib_esp32-version.yaml	esp32: board: esp32-c3-devkitm-1, ESP-IDF optimizado	ESP32/C3
-lib_esp8266-version.yaml	Framework Arduino, flash_mode: dio	ESP8266
-🔧 Secrets necesarios
-secrets.yaml:
-
-text
 wifi_ssid: "MiWiFi"
 wifi_password: "mipass"
-device_name: "sensor-salon"
-friendly_name: "Salón"
-✨ Características incluidas
-✅ WiFi robusto	reboot_timeout: 0s, AP solo manual
-✅ API estable	reboot_timeout: 0s, sin reinicios locos
-✅ OTA seguro	Contraseña dinámica opcional
-✅ Sin bucles	No se reinicia solo por perder WiFi/HA
-✅ Optimizado	Config específico por chip
-💡 Ejemplo completo ESP32-C3
+ap_ssid: "ESP-Config"
+ap_password: "12345678"
+admin: "admin123"
+2. ESP32-C3 / ESP32 (Recomendado)
 text
 substitutions:
-  device_name: sensor-salon
-  friendly_name: Salón
+  device_name: "sensor-salon"
+  friendly_name: "Salón"
 
 esphome:
   name: ${device_name}
 
 packages:
-  - !include configuración-base.yaml
-  - !include configuración-wifi.yaml
+  - !include 0configuracion_base.yaml
+  - !include configuracion_wifi.yaml  
   - !include lib_esp32-version.yaml
 
-# Aquí tus sensores, switches, etc.
+# Aquí tus sensores
 sensor:
   - platform: dht
     pin: GPIO4
@@ -77,21 +42,85 @@ sensor:
       name: "Temperatura"
     humidity:
       name: "Humedad"
-🆕 Crear tu propio paquete
+3. ESP8266 (NodeMCU, Wemos, etc.)
+text
+packages:
+  - !include 0configuracion_base.yaml
+  - !include configuracion_wifi.yaml
+  - !include lib_esp8266-version.yaml  # Cambia esta línea
+4. Compilar → Flashear → ¡Listo!
+📁 Estructura de Paquetes
+Archivo	✅ Incluye	🎯 Para
+0configuracion_base.yaml	Logger, API estable, OTA, captive portal	Todos
+configuracion_wifi.yaml	WiFi robusto + monitoreo + AP manual	Todos
+lib_esp32-version.yaml	ESP-IDF optimizado, temp interna, LED	ESP32/C3
+lib_esp8266-version.yaml	Framework Arduino básico	ESP8266
+configuracion_portal_BLE-WIFI.yaml	BLE Improv + Webserver	ESP32
+🔍 Entidades en Home Assistant
+Sensores Principales
+text
+🌡️ Seal WiFi (RSSI)
+⏱️ Uptime 
+🔢 Intentos sin WiFi/API
+🌡️ Temperatura Interna (ESP32)
+📶 IP/SSID/MAC
+Binary Sensors
+text
+🔴 Modo sin conexión
+📡 Modo AP activo
+✅ API conectada
+Estados
+text
+📱 Estado conexión: "Conectado" | "No API" | "Modo AP" | "Sin conexión"
+Eventos HA (para automatizaciones)
+text
+avisoestadoconexion: ["estadonoapi", "estadomodoap"]
+avisoestadoesp32: ["temperaturaelevada", "conexiondebil"]
+Botones
+text
+🔄 Reiniciar | Modo Seguro | Factory Reset
+📡 Desconectar/Reconectar WiFi
+💤 Deep Sleep (ESP32)
+🎛️ Indicador LED Integrado (ESP32)
+Estado LED	🚦 Significado
+Apagado	✅ Todo OK
+Fijo	📡 Modo AP activo
+Parpadea lento	🔥 Temp > 60°C
+Parpadea rápido	📴 RSSI < -80dBm
+⚙️ Personalización
+Cambiar umbrales (WiFi)
+text
+# En configuracion_wifi.yaml
+umbralcontadores: 20    # Intentos máximo sin conexión
+intervalochequeo: 15s   # Frecuencia chequeo
+LED integrado
+text
+# En lib_esp32-version.yaml
+led_integra_pin: GPIO2
+🎯 Casos de Uso
+text
+✅ Sensores inalámbricos estables
+✅ Dispositivos críticos (24h)
+✅ Flotas grandes de dispositivos
+✅ Diagnóstico remoto
+✅ Primer boot sin cables (BLE)
+📖 Flujo Completo
+text
+1. Copia → Pega → Compila
+2. Flashea (OTA/USB/BLE)
+3. Se conecta automáticamente
+4. Monitorea todo en HA
+5. AP manual si algo falla
+🤝 Contribuir
+Fork este repositorio
+
 Crea mi-paquete.yaml
 
-Añádelo a packages:
+Documéntalo aquí
 
-Documenta en este README
+Pull Request
 
-🤝 Contribuir
-Fork el repositorio
-
-Crea tu paquete lib_mi-funcion.yaml
-
-Pull Request con descripción
-
-📞 Soporte
+💬 Soporte
 ESPHome Discord
 
 Home Assistant Community
