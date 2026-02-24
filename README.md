@@ -12,6 +12,12 @@ Colección de **configuraciones probadas y estables** que solucionan problemas c
 
 ## 🚀 Instalación Rápida
 
+### 🛠️ Solución de Problemas Comunes
+- **Problema**: El dispositivo no se conecta a WiFi.  
+  **Solución**: Verificar que `wifi_ssid` y `wifi_password` estén correctamente definidos en `secrets.yaml`.  
+- **Problema**: Reinicios frecuentes.  
+  **Solución**: Asegurar que `ap_ssid` y `ap_password` sean únicos y no conflictuén con otros dispositivos.
+
 ### 1. **Preparar secrets.yaml**
 ```yaml
 wifi_ssid: "MiWiFi"
