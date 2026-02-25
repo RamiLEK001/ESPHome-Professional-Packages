@@ -1,0 +1,97 @@
+# ESPHome Professional Packages 🚀
+
+Bienvenido a la Wiki de **ESPHome Professional Packages**, un ecosistema modular diseñado para dotar a tus placas ESP32 y ESP8266 de capacidades de grado empresarial: telemetría agresiva, un motor de alarmas en C++ con notificaciones nativas y supervivencia de red híbrida (Improv, Fallback AP).
+
+**Filosofía**: Copia → Pega → Compila → Disfruta = 100% de operatividad en 3 minutos.
+
+---
+
+## ⚡ Guía de Instalación Rápida (Quick Start)
+
+Este proyecto utiliza una arquitectura de *Módulo Principal* a través de `configuracion_base.yaml`. Este archivo actúa como el núcleo de configuración física de tu placa de desarrollo.
+
+1. **Inicia un nuevo dispositivo** en tu Dashboard de ESPHome (Ej: `http://homeassistant.local:8123`).
+2. Sigue el asistente para conectarlo al WiFi y dale a instalar.
+3. Cuando termine y te muestre el archivo `.yaml` vacío, dale a **Edit**.
+4. Borra todo y **copia y pega** el contenido íntegro del archivo `configuracion_base.yaml` de este repositorio.
+5. Pega tus secretos: Remplaza `api: encryption: key:` y `ota: password:` con los que generó ESPHome en el paso 1.
+6. **Descomenta tu Placa Física**: En el archivo base verás la sección *"CONFIGURACIÓN DE PLACA"*. Quita las `#` de la placa que estés usando (ESP32 estándar, ESP32-C3 o ESP8266). Esto inyecta sus perfiles físicos de RAM y CPU para la telemetría automática.
+7. Dale a **"Install"**. Automáticamente llamará a todos los paquetes `lib-...` ¡y listo!
+
+---
+
+## 🧠 Arquitectura de Módulos (Packages)
+
+Todo el código pesado e indescifrable está escondido en librerías mantenibles para que tú solo veas un archivo limpio:
+
+1. **`configuracion_base.yaml`**: Selección de Hardware, secretos de Home Assistant, configurador OTA e inclusión de librerías.
+2. **`lib-wifi_conectividad.yaml`**: El Motor de Red. Unifica y abstrae las utilidades vitales de conexión:
+   * **Modo AP Fallback**: Si el WiFi se cae, tras 90 segundos la placa levanta su propia red temporal de configuración.
+   * **Improv Inalámbrico (BLE)**: Permite integrar la placa a Home Assistant a través de Bluetooth sin pre-configurar SSIDs.
+   * **Web Server y Captive Portal**: Interfaz Web local de emergencia si te quedas sin acceso al router.
+   * **Watchdogs API**: Reincio duro del ESP si pierde el contacto con Home Assistant durante más de 5 minutos, salvándolo de bloqueos catastróficos.
+3. **`lib-estados_alarmas.yaml`**: El Cerebro Inspector. Implementa un motor en C++ que chequea a fondo los componentes físicos de hardware, latencias y conexiones cada 29 segundos inyectando los diagnósticos como Notificaciones PUSH.
+
+---
+
+## 🏷️ La Regla de Oro: Cómo Nombrar tu Dispositivo
+
+En la parte superior de `configuracion_base.yaml` encontrarás el núcleo de identidad:
+
+```yaml
+esphome:
+  name: "poner-nombre-de-dispositivo" # <--- ESTO SÍ DEBEN CAMBIARLO 
+  friendly_name: "Sin Configurar"     # <--- ESTO NO LO DEBEN TOCAR
+```
+
+**ATENCIÓN**:
+1. ✅ **`name:`** (El nombre Físico). Cambia `poner-nombre-de-dispositivo` a un nombre en minúsculas y sin espacios (EJ: `sensor-puerta`). Así es como el chip se registrará internamente en la tabla DHCP de tu Router.
+2. ❌ **`friendly_name:`** (El nombre Amigable). **¡Jamás toques esta línea en el YAML!** 
+
+La arquitectura asume que ESPHome inyectará constantemente las palabras "Sin Configurar" en los +30 sensores de la placa y en sus notificaciones de alarma. Esto evita que cruces telemetrías sueltas e idénticas si tienes 5 placas esparcidas por tu casa.
+
+**¿Cómo le pongo nombre amigable (Ej: "Sensor Salón")?**
+¡Fácil, limpio y sin tener que recompilar código jamás!
+1. Flashea la placa y agrégala a la app de Home Assistant tal y como está ("Sin Configurar").
+2. En Home Assistant, ve a **Ajustes -> Dispositivos** y busca tu placa de ESPHome recién añadida.
+3. Haz clic en el engranaje superior de configuración ⚙️.
+4. Escribe el nuevo nombre ahí y dale a "Renombrar Entidades". Home Assistant automáticamente cambiará absolutamente todo (De "Sin Configurar Batería" a "Sensor Salón Batería") en décimas de segundo.
+
+---
+
+## 📊 Telemetría y Capacidades Disponibles
+
+Tus sensores en la UI se poblarán instantáneamente de docenas de variables agrupadas en "Diagnósticos".
+
+### Monitoreo de Red
+* Señal de WiFi precisa (convertida matemáticamente de dBm a Porcentaje amigable 0-100%).
+* Interruptores visuales booleanos para depuración del árbol (API conectada, AP encendido, WiFi vivo).
+* Mapeo de identidad (MAC, IP del Chip, BSSID de la Antena que está dando cobertura a la placa).
+* Botones PUSH configurables para Forzar la Desconexión/Reconexión controlada sin quitar la alimentación, y Botones rápidos de Deep Sleep o Safe Mode de la BIOS de la ESP.
+
+### Inteligencia de Hardware (C++)
+* Free RAM + Memory Fragmentation (Útil para cazar memory leaks en tu propio código a lo largo de semanas).
+* Uptime en formato legible humano ("4d 13h 25m"), no Segundos brutos irreconocibles.
+* *Loop Time* (Latencia de la máquina virtual), capaz de chivarte si agregas componentes lentos que asfixian el dispositivo.
+* Frecuencia del reloj CPU al límite máximo de la placa y Temperatura Interna de la circuitería del silicio ESP32 en Celcius.
+* Traductor humano para `reset_reason` ("Por qué se había apagado la ESP la última vez").
+
+---
+
+## 🚨 Motor de Alarmas Táctico
+
+Incluye un analizador de *Thresholds* que inyecta información al sistema unificado de HA (ej: `ha_notify_service: "notify.notify"`) y categoriza en 4 Gravedades el estado del chip ESPHome **cada 29 segundos**.
+
+* **0. Nada**: Operativa al 100%. Todo en control.
+* **1. Leve**: Información y telemetría no-urgente (Ej: "Reboot Sugerido al sobrepasar la semana entera encendido para alargar la vida útil" o "Señal WiFi Débil (<50%)").
+* **2. Moderado**: Alerta Push a la app *solo si es propenso a convertirse en daño catastrófico próximo* (Ej: "Falta de Memoria (<50kb)" o "Reinicio por Error Desconocido").
+* **3. Grave**: La peor situación. El Motor notifica y registra la avería en HA (Ej: "Temp Crítica del silicio (>80°) | Hardware Fríendose", o "API y Red caídas").
+
+---
+
+## ⚠️ Advertencia Técnica para Chips ESP8266
+
+Este proyecto empuja los límites extrayendo métricas del hardware avanzado y módulos BLE/Improv solo equipados en arquitecturas modernas (ESP32). ¡Puedes flashear un pobre ESP8266! Funcionará perfectamente gracias a las rutinas C++ blindadas, **PERO**:
+
+> [!CAUTION]  
+> Para ESP8266: Debes ingresar a `lib-estados_alarmas.yaml` de forma **obligatoria**, buscar los bloques `internal_temperature`, `min_free` y `psram`, **y borrarlos** o te lanzará Errores de Compilación de que 'no existen'. Están etiquetados con grandes exclamaciones para que los encuentres en 3 segundos.

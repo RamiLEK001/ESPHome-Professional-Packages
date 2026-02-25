@@ -1,0 +1,473 @@
+# alarmas_sistema.yaml
+# Paquete de sistema de alarmas para ESPHome Professional Packages
+
+  # --- NIVELES DE GRAVEDAD DE ALARMAS ---
+  # 0: Nada (Pues nada, todo bien)
+  # 1: Leve (Cosas informativas, no hay que hacer nada)
+  # 2: Moderado (Cosas no graves pero que hay que solucionar antes de que se conviertan en graves)
+  # 3: Grave (Hay que solucionar urgentemente, peligro de romper algo: software, hardware, sistema, etc.)
+
+
+
+  # =========================================================================================
+  # UMBRALES DE HARDWARE POR DEFECTO 
+  # =========================================================================================
+
+substitutions:
+
+  # --- CONFIGURACIÓN DE NOTIFICACIONES ---
+  # Servicio de notificación en HA (ej: notify.notify, notify.mobile_app_iphone)
+  ha_notify_service: "notify.notify"
+
+  # --- UMBRALES CONFIGURABLES COMUNES ---
+  umbral_wifi_critico_pct: "30.0"      # % de señal WiFi crítica
+  umbral_wifi_debil_pct: "50.0"        # % de señal WiFi débil
+  umbral_temp_critica: "80.0"          # Celsius (Solo aplica si hay sensor de temp interna)
+  umbral_temp_elevada: "65.0"          # Celsius
+  umbral_uptime_max: "604800.0"        # Recomendación de reinicio en Segundos (7 días)
+
+
+interval:
+  - interval: 29s
+    then:
+      - script.execute: script_alarmas
+
+globals:
+  # Nivel de gravedad global (0: Nada, 1: Leve, 2: Moderado, 3: Grave)
+  - id: global_gravedad_alarma
+    type: int
+    restore_value: no
+    initial_value: '0'
+  
+  # Texto que acumula las alarmas activas
+  - id: global_texto_alarmas
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+# =============================================================================
+# --- ESTADOS ---
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# BINARY SENSORS 
+# -----------------------------------------------------------------------------
+binary_sensor:
+  # Indica si el dispositivo está conectado exitosamente a Home Assistant
+  - platform: status
+    name: "${friendly_name} Estado HA"
+    id: status_ha
+    entity_category: "diagnostic"
+
+  # Se activa (ON) si la placa ha perdido totalmente la conexión con el router WiFi
+  - platform: template
+    name: "${friendly_name} Modo sin conexión"
+    id: modo_sin_conexion
+    internal: true
+    entity_category: "diagnostic"
+    device_class: connectivity
+    lambda: "return !id(estado_wifi_activo);"
+
+  # Se activa (ON) si la placa no encontró WiFi y está emitiendo su propia red de rescate
+  - platform: template
+    name: "${friendly_name} Modo AP"
+    id: modo_ap
+    internal: true
+    entity_category: "diagnostic"
+    device_class: connectivity
+    lambda: "return id(estado_ap_activo);"
+
+  # Se activa (ON) cuando la API nativa de ESPHome logra comunicarse con Home Assistant
+  - platform: template
+    name: "${friendly_name} API conectada"
+    id: api_conectada
+    internal: true
+    entity_category: "diagnostic"
+    device_class: connectivity
+    lambda: "return id(estado_api_activa);"
+
+# -----------------------------------------------------------------------------
+# SENSORS
+# -----------------------------------------------------------------------------
+sensor:
+  # --- 1. Red y WiFi ---
+  # Fuerza de la señal WiFi bruta en decibelios. Oculto por defecto en la interfaz (internal: true)
+  - platform: wifi_signal
+    name: "${friendly_name} Señal WiFi (dBm)"
+    id: wifi_rssi
+    update_interval: 60s
+    entity_category: "diagnostic"
+    internal: true
+
+  # Convierte matemáticamente los dBm a un porcentaje (0% a 100%) más amigable para el usuario
+  - platform: copy
+    source_id: wifi_rssi
+    name: "${friendly_name} Señal WiFi (%)"
+    id: wifi_signal_percent
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    entity_category: "diagnostic"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+
+  # --- 2. Recursos de Hardware ---
+  # Segundos puros desde el arranque. Usado internamente por el motor de alarmas para cálculos (internal: true)
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    id: uptime_s
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    entity_category: "diagnostic"
+    internal: true
+
+  # Temperatura del núcleo de silicio del chip ESP32 (No disponible en ESP8266)
+  # ⚠️ ESP8266: Comenta o borra todo este bloque (de la línea 124 a la 129) si usas un ESP8266, o dará error de compilación.
+  - platform: internal_temperature
+    name: "${friendly_name} Temperatura Interna"
+    id: internal_temp
+    update_interval: 60s
+    entity_category: "diagnostic"
+
+  - platform: debug
+    # Velocidad del procesador. Sirve para detectar si la placa se queda bloqueada al máximo rendimiento
+    cpu_frequency:
+      name: "${friendly_name} Frecuencia CPU"
+      id: debug_cpu_freq
+      entity_category: "diagnostic"
+    # RAM disponible. Vital para asegurar que la placa no sufra un OutOfMemory y crashee
+    free:
+      name: "${friendly_name} RAM Libre"
+      id: debug_ram
+      entity_category: "diagnostic"
+    # Bloque máximo de RAM contigua.
+    block:
+      name: "${friendly_name} Bloque Máx RAM"
+      id: debug_block
+      entity_category: "diagnostic"
+    # Tiempo máximo que tarda en dar una vuelta el código.
+    loop_time:
+      name: "${friendly_name} Tiempo de Loop Máximo"
+      id: debug_loop
+      entity_category: "diagnostic"
+    # Mínima RAM libre histórica desde el arranque. Útil para detectar fugas de memoria (Memory Leaks).
+    # ⚠️ ESP8266: Comenta o borra este bloque 'min_free' (solo ESP32 / LibreTiny)
+    min_free:
+      name: "${friendly_name} RAM Libre Mínima"
+      id: debug_min_free
+      entity_category: "diagnostic"
+    # Nivel de fragmentación de la memoria RAM (0% es limpio, >50% puede fallar reservando memoria).
+    fragmentation:
+      name: "${friendly_name} RAM Fragmentación"
+      id: debug_fragmentation
+      entity_category: "diagnostic"
+    # RAM Externa libre (Solo aplicable en chips ESP32 con hardware adicional).
+    # ⚠️ ESP8266: Comenta o borra este bloque 'psram' también.
+    psram:
+      name: "${friendly_name} PSRAM Libre"
+      id: debug_psram
+      entity_category: "diagnostic"
+
+# -----------------------------------------------------------------------------
+# TEXT SENSORS (Información y Telemetría Textual)
+# -----------------------------------------------------------------------------
+text_sensor:
+  # --- 1. Información de Conectividad y Red ---
+  # Resumen legible del estado ("Modo AP", "Sin conexión", "No API", "Conectado")
+  - platform: template
+    name: "${friendly_name} Estado conexión"
+    id: estado_conexion
+    entity_category: "diagnostic"
+    update_interval: 15s
+    lambda: |-
+      if (id(estado_ap_activo)) return {"Modo AP"};
+      if (!id(estado_wifi_activo)) return {"Sin conexión"};
+      if (!id(estado_api_activa)) return {"No API"};
+      return {"Conectado"};
+
+  # Información física del chip en la red de tu casa
+  - platform: wifi_info
+    ip_address:
+      name: "${friendly_name} IP actual"
+      entity_category: "diagnostic"
+    ssid:
+      name: "${friendly_name} AP SSID"
+      entity_category: "diagnostic"
+    bssid:
+      name: "${friendly_name} MAC del AP"
+      entity_category: "diagnostic"
+    mac_address:
+      name: "${friendly_name} MAC"
+      entity_category: "diagnostic"
+
+  # --- 2. Información del Sistema y Compilación ---
+  # Muestra la versión del framework base (Ej: 2024.2.1)
+  - platform: version
+    name: "${friendly_name} Versión ESPHome"
+    hide_timestamp: true
+    entity_category: "diagnostic"
+
+  # Uptime convertido de Segundos puros a texto humano ("1d 5h 30m 10s")
+  - platform: template
+    name: "${friendly_name} Tiempo de Actividad"
+    icon: "mdi:clock-outline"
+    entity_category: "diagnostic"
+    internal: false
+    update_interval: 60s
+    lambda: |-
+      int seconds = id(uptime_s).state;
+      int days = seconds / (24 * 3600);
+      seconds = seconds % (24 * 3600);
+      int hours = seconds / 3600;
+      seconds = seconds % 3600;
+      int minutes = seconds / 60;
+      int secs = seconds % 60;
+      
+      return {(
+        (days > 0 ? to_string(days) + "d " : "") +
+        (hours > 0 ? to_string(hours) + "h " : "") +
+        (minutes > 0 ? to_string(minutes) + "m " : "") +
+        (to_string(secs) + "s")
+      ).c_str()};
+
+  - platform: debug
+    # Expone físicamente la última causa de reinicio ("Power On", "Software Reset", "Brownout", etc) de forma legible
+    reset_reason:
+      name: "${friendly_name} Motivo último reinicio"
+      id: debug_reset_reason
+      entity_category: "diagnostic"
+    # Exposición altísima de telemetría de sistema: Free heap size al inicio, características físicas del chip embebido...
+    device:
+      name: "${friendly_name} Información Dispositivo"
+      entity_category: "diagnostic"
+
+
+  # Versión del proyecto + Fecha y Hora exacta en la que se flasheó la placa
+  - platform: template
+    name: "${friendly_name} ESPHome Project Version Detailed"
+    id: esphome_project_version_text_detailed
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+    update_interval: 60s
+    lambda: |-
+      return { ESPHOME_PROJECT_VERSION " " + App.get_compilation_time() };
+
+  # Nombre de sistema base
+  - platform: template
+    name: "${friendly_name} ESPHome Project Name"
+    id: esphome_project_name
+    icon: "mdi:information-box"
+    entity_category: "diagnostic"
+    update_interval: 60s
+    lambda: |-
+      return { ESPHOME_PROJECT_NAME };
+
+  # --- 3. Telemetría de Alarmas ---
+  # Texto en Home Assistant donde el cerebro avisa ("Nada", "Leve", "Moderado", "Grave")
+  - platform: template
+    name: "${friendly_name} Estado de Gravedad"
+    id: sensor_gravedad_texto
+    entity_category: "diagnostic"
+    icon: "mdi:alert"
+    update_interval: never
+
+# -----------------------------------------------------------------------------
+# BOTONES Y DEEP SLEEP
+# -----------------------------------------------------------------------------
+# Motor para dormir la placa para ahorro de energía máximo
+deep_sleep:
+  id: deep_sleep
+  run_duration: 0s
+  sleep_duration: 24h
+
+button:
+  # Duerme la placa forzosamente usando el motor deep_sleep configurado arriba
+  - platform: template
+    name: "${friendly_name} Apagar (deep sleep)"
+    entity_category: "config"
+    icon: "mdi:power"
+    on_press:
+      then:
+        - deep_sleep.enter: deep_sleep
+  # Reinicia la placa apagándola y volviéndola a encender limpia
+  - platform: restart
+    name: "${friendly_name} Reiniciar dispositivo"
+    entity_category: "config"
+  # Reinicia la placa sin encender integraciones pesadas para protegerla de boot-loops
+  - platform: safe_mode
+    name: "${friendly_name} Reiniciar en modo seguro"
+    entity_category: "diagnostic"
+  # Borra todo rastro del WiFi y credenciales de la memoria 
+  - platform: factory_reset
+    name: "${friendly_name} Restablecer a fábrica"
+    entity_category: "config"
+
+# =============================================================================
+# --- MOTOR PRINCIPAL DE ALARMAS ---
+# =============================================================================
+
+  # Sensor de texto que expone las alarmas en Home Assistant (Actualizado desde el script)
+  - platform: template
+    name: "${friendly_name} Alarmas Activas"
+    id: sensor_texto_alarmas
+    entity_category: "diagnostic"
+    icon: "mdi:alert-circle"
+
+# -----------------------------------------------------------------------------
+# SCRIPTS Y TAREAS PROGRAMADAS
+# -----------------------------------------------------------------------------
+script:
+  - id: script_alarmas
+    mode: single
+    then:
+      - lambda: |-
+          std::string alarmas = "";
+          int gravedad_max = 0;
+
+          // ==========================================
+          // 1. EVALUACIÓN DE ESTADO DE RED
+          // ==========================================
+          if (!id(estado_wifi_activo)) {
+            alarmas += "WiFi Desconectado, ";
+            if (gravedad_max < 3) gravedad_max = 3; // Grave
+          } else if (id(estado_ap_activo)) {
+            alarmas += "Modo AP Emergencia, ";
+            if (gravedad_max < 3) gravedad_max = 3; // Grave
+          } else if (!id(estado_api_activa)) {
+            alarmas += "API Caída, ";
+            if (gravedad_max < 3) gravedad_max = 3; // Grave
+          } else if (id(wifi_signal_percent).has_state()) {
+            if (id(wifi_signal_percent).state < ${umbral_wifi_critico_pct}) {
+              alarmas += "Señal WiFi Crítica, ";
+              if (gravedad_max < 2) gravedad_max = 2; // Moderado
+            } else if (id(wifi_signal_percent).state < ${umbral_wifi_debil_pct}) {
+              alarmas += "Señal WiFi Débil, ";
+              if (gravedad_max < 1) gravedad_max = 1; // Leve
+            }
+          }
+
+          // ==========================================
+          // 2. EVALUACIÓN DE HARDWARE Y SISTEMA
+          // ==========================================
+          
+          // A. Temperatura Interna (Usa #ifdef porque ESP8266 interrumpe el parsing)
+#ifdef USE_ESP32
+          if (id(internal_temp).has_state()) {
+            if (id(internal_temp).state > ${umbral_temp_critica}) {
+              alarmas += "Temp Crítica, ";
+              if (gravedad_max < 3) gravedad_max = 3;
+            } else if (id(internal_temp).state > ${umbral_temp_elevada}) {
+              alarmas += "Temp Elevada, ";
+              if (gravedad_max < 1) gravedad_max = 2;
+            }
+          }
+#endif
+
+          // B. Uptime (Reiniciar cada 7 días = 604800s)
+          if (id(uptime_s).has_state()) {
+            if (id(uptime_s).state > ${umbral_uptime_max}) {
+              alarmas += "Reboot Sugerido, ";
+              if (gravedad_max < 1) gravedad_max = 1;
+            }
+          }
+
+          // C. Memoria RAM (Usando substitutions variables adaptables al chip)
+          if (id(debug_ram).has_state()) {
+            if (id(debug_ram).state < ${umbral_ram_grave}) {
+              alarmas += "RAM muy baja, ";
+              if (gravedad_max < 3) gravedad_max = 3;
+            } else if (id(debug_ram).state < ${umbral_ram_moderada}) {
+              alarmas += "Falta de Memoria, ";
+              if (gravedad_max < 2) gravedad_max = 2;
+            }
+          }
+
+          // D. Latencia (Loop Time, también por substitutions)
+          if (id(debug_loop).has_state()) {
+            if (id(debug_loop).state > ${umbral_loop_time}) {
+              alarmas += "CPU Lenta / Loop Alto, ";
+              if (gravedad_max < 1) gravedad_max = 1;
+            }
+          }
+
+          // E. Frecuencia CPU (Exclusiva ESP32, detectada por hardware y substitution multi-placa)
+#ifdef USE_ESP32
+          if (id(debug_cpu_freq).has_state()) {
+             if (id(debug_cpu_freq).state > ${umbral_cpu_freq_max}) {
+                alarmas += "Frec. CPU Límite Larga Duración, ";
+                if (gravedad_max < 2) gravedad_max = 2; // Moderado
+             }
+          }
+#endif
+
+          // F. Motivo del Último Reinicio (String logic & WDT tolerance on 8266)
+          if (id(debug_reset_reason).has_state()) {
+            std::string rr = id(debug_reset_reason).state;
+            // Filtramos razones normales
+            if (rr != "Power On" && rr != "Software reset CPU" && rr != "Vbat power on reset") {
+#ifdef USE_ESP8266
+              // En ESP8266 "Software WDT reset" es muy natural/habitual
+              if (rr != "Software WDT reset") {
+                alarmas += "Reinicio por Error, ";
+                if (gravedad_max < 2) gravedad_max = 2;
+              }
+#else
+              alarmas += "Reinicio por Error, ";
+              if (gravedad_max < 2) gravedad_max = 2;
+#endif
+            }
+          }
+
+          // ==========================================
+          // 2. PROCESAMIENTO FORMATO DE TEXTO
+          // ==========================================
+          if (alarmas == "") {
+            alarmas = "Ninguna";
+            gravedad_max = 0;
+          } else {
+            // Eliminar la coma extra y el espacio al final (", ")
+            alarmas = alarmas.substr(0, alarmas.length() - 2);
+          }
+
+          // ==========================================
+          // 3. ACTUALIZACIÓN ESTADOS HA Y NOTIFICACIONES
+          // ==========================================
+          
+          // Actualización de variables y Sensores (Se ejecuta siempre cada 29s para mantener la gráfica viva en HA)
+          std::string texto_gravedad;
+          switch(gravedad_max) {
+            case 0: texto_gravedad = "Nada"; break;
+            case 1: texto_gravedad = "Leve"; break;
+            case 2: texto_gravedad = "Moderado"; break;
+            case 3: texto_gravedad = "Grave"; break;
+            default: texto_gravedad = "Desconocido"; break;
+          }
+          
+          // Refrescar en Home Assistant
+          id(sensor_gravedad_texto).publish_state(texto_gravedad);
+          
+          // Actualización global e impresión de Logs continua (Eliminado el filtro antispam por petición)
+          id(global_gravedad_alarma) = gravedad_max;
+          
+          if (gravedad_max >= 2) {
+            ESP_LOGW("alarmas", "Nivel crítico/moderado: %s. Motivos: %s", texto_gravedad.c_str(), alarmas.c_str());
+          } else if (gravedad_max == 1) {
+            ESP_LOGI("alarmas", "Nivel leve: %s. Motivos: %s", texto_gravedad.c_str(), alarmas.c_str());
+          } else {
+            ESP_LOGI("alarmas", "Sistema OK. Ninguna alarma activa.");
+          }
+
+          // Guardar el log interno y publicar en el sensor de texto en HA
+          id(global_texto_alarmas) = alarmas;
+          id(sensor_texto_alarmas).publish_state(alarmas);
+      
+      # Enviar notificación push a Home Assistant cada 29s si hay alarmas Graves(3) o Moderadas(2)
+      - if:
+          condition:
+            lambda: 'return id(global_gravedad_alarma) >= 2;'
+          then:
+            - homeassistant.service:
+                service: ${ha_notify_service}
+                data:
+                  title: "⚠️ Alarma en Dispositivo: ${friendly_name}"
+                  message: !lambda 'return id(global_texto_alarmas).c_str();'
+
