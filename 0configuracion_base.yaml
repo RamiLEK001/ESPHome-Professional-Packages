@@ -1,0 +1,68 @@
+# =============================================================================
+######################### CONFIGURACIÓN BASE ESPHome ##########################
+# =============================================================================
+
+# 1. PEGA AQUÍ LAS VARIABLES GENERADAS POR ESPHOME (esphome:, api:, ota.)
+# =============================================================================
+# INSTRUCCIONES:
+# 1. Entra a tu Dashboard de ESPHome atraves de la app de Home Assistant (ej: http://homeassistant.local:8123)
+# 2. Haz clic en "New Device" y sigue el asistente básico.
+# 3. Abre el archivo .yaml (Edit) que ESPHome acaba de crear.
+# 4. Copia los bloques de 'api:' (tu key de encriptación) y 'ota:' (tu password).
+# 5. Pégalos aquí reemplazando los valores de ejemplo de abajo.
+ 
+# IMPORTANTE: Nunca compartas tu api key ni ota password.
+# No borres el campo 'reconnect_timeout: 0s', es vital para la estabilidad.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CONFIGURACIÓN DE PLACA (Pega la que generó ESPHome o descomenta SOLO UNA)
+# -----------------------------------------------------------------------------
+
+# --- OPCIÓN 1: ESP32 estándar (DevKitC, NodeMCU-32S, etc.) ---
+# esp32:
+#   board: esp32dev
+#   framework:
+#     type: arduino
+
+# --- OPCIÓN 2: ESP32-C3 Super Mini (Por Defecto) ---
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# --- OPCIÓN 3: ESP8266 (D1 Mini, NodeMCU, etc.) ---
+# esp8266:
+#   board: d1_mini
+
+logger:
+
+api:
+  encryption:
+    key: "TU_API_KEY_GENERADA_AQUI="  # <--- PEGA TU API KEY AQUÍ
+  reconnect_timeout: 0s
+
+ota:
+  - platform: esphome
+    password: "TU_OTA_PASSWORD_GENERADO_AQUI"  # <--- PEGA TU OTA PASSWORD AQUÍ
+
+captive_portal:
+
+
+# =============================================================================
+# 2. INCLUYE LOS PAQUETES DE "ESPHome Professional Packages"
+# =============================================================================
+
+packages:
+  # --- MÓDULOS OBLIGATORIOS (Para todo dispositivo) ---
+  wifi: !include lib-wifi.yaml
+  alarmas: !include lib-alarms.yaml
+  portal_conexion: !include lib-consumer.yaml
+
+  # --- MÓDULOS ESPECÍFICOS DE LA PLACA (Activa los que correspondan) ---
+  
+  # --- SI USAS ESP32 o ESP32-C3 ---
+  internos_esp32: !include lib-esp32_version.yaml
+
+  # --- SI USAS ESP8266 ---
+  # internos_esp8266: !include lib-esp8266_version.yaml
