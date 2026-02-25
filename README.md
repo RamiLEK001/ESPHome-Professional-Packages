@@ -36,8 +36,8 @@ esphome:
 
 packages:
   - !include 0configuracion_base.yaml
-  - !include configuracion_wifi.yaml  
-  - !include lib_esp32-version.yaml
+  - !include lib-wifi.yaml  
+  - !include lib-esp32_version.yaml
 
 # Aquí tus sensores
 sensor:
@@ -52,16 +52,16 @@ sensor:
 text
 packages:
   - !include 0configuracion_base.yaml
-  - !include configuracion_wifi.yaml
-  - !include lib_esp8266-version.yaml  # Cambia esta línea
+  - !include lib-wifi.yaml
+  - !include lib-esp8266_version.yaml  # Cambia esta línea
 4. Compilar → Flashear → ¡Listo!
 📁 Estructura de Paquetes
 Archivo	✅ Incluye	🎯 Para
 0configuracion_base.yaml	Logger, API estable, OTA, captive portal	Todos
-configuracion_wifi.yaml	WiFi robusto + monitoreo + AP manual	Todos
-lib_esp32-version.yaml	ESP-IDF optimizado, temp interna, LED	ESP32/C3
-lib_esp8266-version.yaml	Framework Arduino básico	ESP8266
-configuracion_portal_BLE-WIFI.yaml	BLE Improv + Webserver	ESP32
+lib-wifi.yaml	WiFi robusto + monitoreo + AP manual	Todos
+lib-esp32_version.yaml	ESP-IDF optimizado, temp interna, LED	ESP32/C3
+lib-esp8266_version.yaml	Framework Arduino básico	ESP8266
+lib-consumer.yaml	BLE Improv + Webserver	ESP32
 🔍 Entidades en Home Assistant
 Sensores Principales
 text
@@ -96,12 +96,12 @@ Parpadea rápido	📴 RSSI < -80dBm
 ⚙️ Personalización
 Cambiar umbrales (WiFi)
 text
-# En configuracion_wifi.yaml
+# En lib-wifi.yaml
 umbralcontadores: 20    # Intentos máximo sin conexión
 intervalochequeo: 15s   # Frecuencia chequeo
 LED integrado
 text
-# En lib_esp32-version.yaml
+# En lib-esp32_version.yaml
 led_integra_pin: GPIO2
 🎯 Casos de Uso
 text

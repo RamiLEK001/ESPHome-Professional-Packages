@@ -1,0 +1,143 @@
+# configuracion_wifi.yaml
+# Uso: packages: wifi: !include configuracion_wifi.yaml
+# Requiere: friendly_name; secrets: wifi_ssid, wifi_password, ap_ssid, ap_password, admin
+# Un script periódico actualiza WiFi, API y el sensor estado_conexion.
+
+
+# --- Constantes (editar aquí para cambiar valores por defecto del sistema) ---
+intervalo_chequeo: 15s # Frecuencia de chequeo del estado de red
+umbral_activar_ap: 6   # 6 chequeos de 15s = 90 segundos sin WiFi para activar el Modo AP
+umbral_reiniciar_api: 20 # 20 chequeos de 15s = 5 minutos sin Home Assistant para forzar un reinicio
+
+wifi:
+  power_save_mode: none
+  fast_connect: true
+  reboot_timeout: 0s
+  output_power: 20dBm
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+    - ssid: !secret ap_ssid
+      password: !secret ap_password
+  ap:
+    password: !secret admin
+    ap_timeout: 0s
+    # IP fija del AP para conexiones más estables (ajusta a tu red si hace falta)
+    manual_ip:
+      static_ip: 192.168.4.1
+      gateway: 192.168.4.1
+      subnet: 255.255.255.0
+
+interval:
+  - interval: ${intervalo_chequeo}
+    then:
+      - script.execute: chequeo_estado
+
+globals:
+  # --- Estados booleanos solicitados ---
+  - id: estado_wifi_activo
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: estado_api_activa
+    type: bool
+    restore_value: false
+    initial_value: "false"
+  - id: estado_ap_activo
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+  # --- Contadores de fallos ---
+  - id: intentos_sin_wifi
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: intentos_sin_api
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+
+
+script:
+  - id: chequeo_estado
+    mode: single
+    then:
+      # ========================================================
+      # 1. ACTUALIZAR GLOBALES BOOLEANAS
+      # ========================================================
+      - if:
+          condition: wifi.connected
+          then:
+            - lambda: "id(estado_wifi_activo) = true;"
+          else:
+            - lambda: "id(estado_wifi_activo) = false;"
+      - if:
+          condition: wifi.ap_active
+          then:
+            - lambda: "id(estado_ap_activo) = true;"
+          else:
+            - lambda: "id(estado_ap_activo) = false;"
+
+      - if:
+          condition: api.connected
+          then:
+            - lambda: "id(estado_api_activa) = true;"
+          else:
+            - lambda: "id(estado_api_activa) = false;"
+
+
+      # ========================================================
+      # 2. LÓGICA DE CONTADORES, SENSORES Y RECUPERACIÓN
+      # ========================================================
+      
+      # --- Fallo de WiFi ---
+      - if:
+          condition:
+            not:
+              wifi.connected:
+          then:
+            - lambda: "id(intentos_sin_wifi)++;"
+            - if:
+                condition: lambda: "return id(intentos_sin_wifi) >= ${umbral_activar_ap};"
+                then:
+                  - wifi.enable_ap:
+          else:
+            - lambda: "id(intentos_sin_wifi) = 0;"
+
+
+      # --- Fallo de API (con WiFi activo) ---
+      - if:
+          condition: wifi.connected
+          then:
+            - if:
+                condition: api.connected
+                then:
+                  - lambda: "id(intentos_sin_api) = 0;"
+                else:
+                  - lambda: "id(intentos_sin_api)++;"
+                  - if:
+                      condition: lambda: "return id(intentos_sin_api) >= ${umbral_reiniciar_api};"
+                      then:
+                        - logger.log: "API sin conexión (>= ${umbral_reiniciar_api} intentos). Reiniciando el dispositivo."
+                        - restart
+
+
+
+button:
+  - platform: template
+    name: "${friendly_name} Forzar Modo AP"
+    icon: "mdi:wifi-alert"
+    on_press:
+      then:
+        - wifi.enable_ap:
+  - platform: template
+    name: "${friendly_name} Reconectar WiFi"
+    icon: "mdi:wifi-refresh"
+    on_press:
+      then:
+        # Forzar desconexión limpia y reconexión
+        - wifi.disconnect:
+        - delay: 2s
+        - wifi.connect:

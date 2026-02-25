@@ -1,0 +1,61 @@
+# configuracion_portal_BLE-WIFI.yaml
+# Uso: packages: portal_ble: !include configuracion_portal_BLE-WIFI.yaml
+# Solo para ESP32 / ESP32-C3 (no usar en ESP8266: no tiene BLE).
+# Requiere: secret "admin" (o web_server_user / web_server_pass si cambias).
+#
+# Incluye: Improv por BLE + Improv por Serial + Web Server con auth.
+# Aviso: BLE consume mucha RAM; evita añadir Voice Assistant u otros componentes pesados.
+
+# --- Constantes (opcional: editar para ajustar tiempos y puerto) ---
+# puerto_web: 80
+# improv_authorized_duration: 1min   # Tiempo hasta que pide re-autorizar
+# improv_wifi_timeout: 90s           # Espera antes de iniciar Improv tras perder WiFi
+
+# Evento para HA: al provisionar WiFi por Improv se dispara (para notificar/registrar en HA)
+event:
+  - platform: template
+    name: "${friendly_name} Improv provisionado"
+    id: improv_provisioned_event
+    event_types:
+      - improv_provisioned
+
+# -----------------------------------------------------------------------------
+# Improv por Bluetooth (configuración WiFi desde app/HA sin cable)
+# -----------------------------------------------------------------------------
+esp32_improv:
+  authorizer: none
+  # authorized_duration: 1min
+  # wifi_timeout: 90s
+  next_url: "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome"
+  on_start:
+    then:
+      - logger.log: "Improv BLE: esperando autorización / autorizado"
+  on_provisioning:
+    then:
+      - logger.log: "Improv BLE: provisionando WiFi..."
+  on_provisioned:
+    then:
+      - logger.log: "Improv BLE: WiFi configurado correctamente"
+      - event.trigger:
+          id: improv_provisioned_event
+          event_type: improv_provisioned
+  on_stop:
+    then:
+      - logger.log: "Improv BLE: detenido"
+
+# -----------------------------------------------------------------------------
+# Improv por Serial (configuración WiFi por USB desde ESP Web Tools / HA)
+# -----------------------------------------------------------------------------
+improv_serial:
+  # Redirige a HA tras configurar; opcional: next_url con {{ip_address}}, {{device_name}}
+  # next_url: "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome"
+
+# -----------------------------------------------------------------------------
+# Web Server (panel local por IP; auth recomendado)
+# -----------------------------------------------------------------------------
+web_server:
+  port: 80
+  auth:
+    username: "admin"
+    password: !secret admin
+  # ota: true   # Por defecto permite OTA desde la web; poner false para desactivar solo aquí
