@@ -1,32 +1,35 @@
 # lib-wifi_conectividad.yaml
-# Uso: packages: wifi: !include lib-wifi_conectividad.yaml
-# Requiere: friendly_name; secrets: wifi_ssid, wifi_password, ap_ssid, ap_password, admin
+# Uso: packages: wifi: !include lib/lib-wifi_conectividad.yaml
+# Requiere: friendly_name; secrets: admin
 #
 # Incluye: Motor de red híbrido (WiFi, Modo AP fallback, Improv BLE, Improv Serial, Web Server)
 # y telemetría de monitoreo continuo de conexión.
 
 # --- Constantes (editar aquí para cambiar valores por defecto del sistema) ---
 substitutions:
+  # Contraseña para la red WiFi de emergencia (Fallback AP)
+  ap_password: "0123456789"
+  # Contraseña para la interfaz web local de rescate (usuario: admin)
+  web_server_password: "0123456789"
   intervalo_chequeo: 15s # Frecuencia de chequeo del estado de red
-  umbral_activar_ap: "6"   # 6 chequeos de 15s = 90 segundos sin WiFi para activar el Modo AP
+  tiempo_activar_ap: "3min"  # Tiempo sin WiFi antes de levantar la antena local de rescate (Nativo de ESPHome)
   umbral_reiniciar_api: "20" # 20 chequeos de 15s = 5 minutos sin Home Assistant para forzar un reinicio
 
 # -----------------------------------------------------------------------------
 # MOTOR PRINCIPAL WIFI
 # -----------------------------------------------------------------------------
 wifi:
+  id: componente_wifi
+  # enable_on_boot: false  <- ELIMINADO: Improv BLE necesita que el radio WiFi esté encendido para escanear redes.
   power_save_mode: none
-  fast_connect: true
+  # fast_connect: true (Desactivado al no tener redes pre-configuradas)
   reboot_timeout: 0s
   output_power: 20dBm
-  networks:
-    - ssid: !secret wifi_ssid
-      password: !secret wifi_password
-    - ssid: !secret ap_ssid
-      password: !secret ap_password
+  
+  # Red de emergencia (Fallback AP) si desaparecen las credenciales
   ap:
-    password: !secret admin
-    ap_timeout: 0s
+    password: "${ap_password}"
+    ap_timeout: ${tiempo_activar_ap}
     # IP fija del AP para conexiones más estables (ajusta a tu red si hace falta)
     manual_ip:
       static_ip: 192.168.4.1
@@ -38,8 +41,9 @@ wifi:
 # -----------------------------------------------------------------------------
 # Improv por Bluetooth (Solo ESP32 / ESP32-C3)
 esp32_improv:
+  status_indicator: led_estado_sistema
   authorizer: none
-  wifi_timeout: 0s        # Sin espera: arranca Improv al instante si no hay WiFi
+  wifi_timeout: 5s        # Sin espera: arranca Improv al instante si no hay WiFi
   next_url: "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome"
   on_start:
     then:
@@ -70,7 +74,7 @@ web_server:
   port: 80
   auth:
     username: "admin"
-    password: !secret admin
+    password: "${web_server_password}"
 
 # -----------------------------------------------------------------------------
 # MOTOR DE MONITOREO CONSTANTE
@@ -100,10 +104,6 @@ globals:
     initial_value: "false"
 
   # --- Contadores de fallos ---
-  - id: intentos_sin_wifi
-    type: int
-    restore_value: false
-    initial_value: "0"
   - id: intentos_sin_api
     type: int
     restore_value: false
@@ -123,7 +123,8 @@ script:
           else:
             - lambda: "id(estado_wifi_activo) = false;"
       - if:
-          condition: wifi.ap_active
+          condition:
+            lambda: "return id(componente_wifi).is_ap_active();"
           then:
             - lambda: "id(estado_ap_activo) = true;"
           else:
@@ -138,22 +139,8 @@ script:
 
 
       # ========================================================
-      # 2. LÓGICA DE CONTADORES, SENSORES Y RECUPERACIÓN
+      # 2. LÓGICA DE RECUPERACIÓN (API ONLY, WiFi es Nativo)
       # ========================================================
-      
-      # --- Fallo de WiFi ---
-      - if:
-          condition:
-            not:
-              wifi.connected:
-          then:
-            - lambda: "id(intentos_sin_wifi)++;"
-            - if:
-                condition: lambda: "return id(intentos_sin_wifi) >= ${umbral_activar_ap};"
-                then:
-                  - wifi.enable_ap:
-          else:
-            - lambda: "id(intentos_sin_wifi) = 0;"
 
 
       # --- Fallo de API (con WiFi activo) ---
@@ -167,27 +154,34 @@ script:
                 else:
                   - lambda: "id(intentos_sin_api)++;"
                   - if:
-                      condition: lambda: "return id(intentos_sin_api) >= ${umbral_reiniciar_api};"
+                      condition: 
+                        lambda: "return id(intentos_sin_api) >= ${umbral_reiniciar_api};"
                       then:
                         - logger.log: "API sin conexión (>= ${umbral_reiniciar_api} intentos). Reiniciando el dispositivo."
-                        - restart
+                        - button.press: boton_reinicio
 
 # -----------------------------------------------------------------------------
 # HERRAMIENTAS DE RED (BOTONES EN HOME ASSISTANT)
 # -----------------------------------------------------------------------------
 button:
   - platform: template
-    name: "${friendly_name} Forzar Modo AP"
-    icon: "mdi:wifi-alert"
-    on_press:
-      then:
-        - wifi.enable_ap:
-  - platform: template
     name: "${friendly_name} Reconectar WiFi"
     icon: "mdi:wifi-refresh"
     on_press:
       then:
         # Forzar desconexión limpia y reconexión
-        - wifi.disconnect:
+        - wifi.disable:
         - delay: 2s
-        - wifi.connect:
+        - wifi.enable:
+
+# -----------------------------------------------------------------------------
+# SALIDAS DE HARDWARE (OUTPUTS)
+# -----------------------------------------------------------------------------
+output:
+  # Salida genérica para controlar el LED integrado de la placa según el perfil
+  - platform: gpio
+    id: led_estado_sistema
+    pin:
+      number: ${pin_led_estado}
+      inverted: ${pin_led_invertido}
+      ignore_strapping_warning: true

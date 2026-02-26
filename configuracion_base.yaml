@@ -2,44 +2,38 @@
 ######################### CONFIGURACIÓN BASE ESPHome ##########################
 # =============================================================================
 
-# 1. PEGA AQUÍ LAS VARIABLES GENERADAS POR ESPHOME (esphome:, api:, ota.)
+# 1. PEGA AQUÍ LA CONFIGURACIÓN BÁSICA DE TU PLACA
 # =============================================================================
 # INSTRUCCIONES:
-# 1. Entra a tu Dashboard de ESPHome a través de la app de Home Assistant (ej: http://homeassistant.local:8123)
-# 2. Haz clic en "New Device" y sigue el asistente básico.
-# 3. Abre el archivo .yaml (Edit) que ESPHome acaba de crear.
-# 4. Copia los bloques de 'api:' (tu key de encriptación) y 'ota:' (tu password).
-# 5. Pégalos aquí reemplazando los valores de ejemplo de abajo.
- 
-# IMPORTANTE: Nunca compartas tu api key ni ota password.
-# No borres el campo 'reconnect_timeout: 0s', es vital para la estabilidad.
+# 1. Sube las librerías a la carpeta lib/ de tu Home Assistant como dicta el README.
+# 2. Crea un "New Device" en ESPHome y dale a instalar.
+# 3. Borra el código generado, copia todo este archivo y pégalo.
 # =============================================================================
 
-
-substitutions:
-  # Versión de tu código interno (Auméntalo cada vez que le añadas algo nuevo a este aparato)
-  version: "0.0.1"
+# =============================================================================
 
 # =============================================================================
 # IDENTIFICACIÓN DEL NÚCLEO (No es necesario tocar excepto 'name')
 # =============================================================================
 esphome:
   # Nombre interno en minúsculas y sin espacios (Ej: "sensor-salon")
-  name: "poner-nombre-de-dispositivo"
+  name: poner-nombre-de-dispositivo
   
   # Nombre interno por defecto. IMPORTANTE: Para renombrar el dispositivo una vez 
   # integrado en la casa, ¡hazlo desde los ajustes ⚙️ de la app de Home Assistant! 
   # No hace falta editar este archivo ni volver a compilar.
-  friendly_name: "Sin Configurar"
+  friendly_name: ${friendly_name}
   
   # Añadir la dirección MAC al nombre para evitar conflictos si tienes varias placas iguales
   name_add_mac_suffix: true
+  min_version: "2026.2.1"
   project:
-    name: "ESPHome Pro.Telemetria"
+    name: "poner-nombre-de-proyecto"
     version: ${version}
-  on_update:
-    - logger.log: "¡Firmware actualizado a la versión ${version}!"
-
+    on_update:
+      - logger.log:
+          format: "Firmware actualizado a la versión %s!"
+          args: ["version"]
   on_boot:
     priority: 200
     then:
@@ -64,7 +58,12 @@ preferences:
 #   board: esp32dev
 #   framework:
 #     type: arduino
+# psram:                       # <--- Descomentar si tu modelo ESP32 (WROVER, etc...) tiene PSRAM física.
 # substitutions:
+#   friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
+#   version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
+#   pin_led_estado: "2"          # <--- Pin del LED integrado (ESP32 normal suele ser 2)
+#   pin_led_invertido: "false"
 #   umbral_ram_grave: "20000"
 #   umbral_ram_moderada: "50000"
 #   umbral_loop_time: "500"
@@ -76,15 +75,23 @@ esp32:
   framework:
     type: esp-idf
 substitutions:
+  friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
+  version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
+  pin_led_estado: "8"          # <--- Pin del LED integrado (ESP32-C3 Super Mini suele ser 8)
+  pin_led_invertido: "true"    # <--- true si el LED enciende en pulso bajo (Super Mini es Invertido)
   umbral_ram_grave: "20000"
   umbral_ram_moderada: "50000"
   umbral_loop_time: "500"
-  umbral_cpu_freq_max: "159000000"
+  umbral_cpu_freq_max: "161000000"
 
 # --- OPCIÓN 3: ESP8266 (D1 Mini, NodeMCU, etc.) ---
 # esp8266:
 #   board: d1_mini
 # substitutions:
+#   friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
+#   version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
+#   pin_led_estado: "2"          # <--- Pin del LED integrado (NodeMCU/D1 Mini suele ser 2)
+#   pin_led_invertido: "true"    # <--- NodeMCU enciede con LOW
 #   umbral_ram_grave: "8000"
 #   umbral_ram_moderada: "15000"
 #   umbral_loop_time: "1000"
@@ -92,14 +99,14 @@ substitutions:
 
 logger:
 
+debug:
+
 api:
-  encryption:
-    key: "TU_API_KEY_GENERADA_AQUI="  # <--- PEGA TU API KEY AQUÍ
+  # Borrada la encriptación manual de la API, se usa el emparejamiento interno nativo.
   reconnect_timeout: 0s
 
 ota:
   - platform: esphome
-    password: "TU_OTA_PASSWORD_GENERADO_AQUI"  # <--- PEGA TU OTA PASSWORD AQUÍ
 
 captive_portal:
 
@@ -110,5 +117,5 @@ captive_portal:
 
 packages:
   # --- MÓDULOS OBLIGATORIOS (Para todo dispositivo) ---
-  wifi: !include lib-wifi_conectividad.yaml
-  alarmas: !include lib-estados_alarmas.yaml
+  wifi: !include lib/lib-wifi_conectividad.yaml
+  alarmas: !include lib/lib-estados_alarmas.yaml

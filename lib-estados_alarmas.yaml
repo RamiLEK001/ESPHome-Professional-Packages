@@ -160,12 +160,12 @@ sensor:
       name: "${friendly_name} RAM Fragmentación"
       id: debug_fragmentation
       entity_category: "diagnostic"
-    # RAM Externa libre (Solo aplicable en chips ESP32 con hardware adicional).
-    # ⚠️ ESP8266: Comenta o borra este bloque 'psram' también.
-    psram:
-      name: "${friendly_name} PSRAM Libre"
-      id: debug_psram
-      entity_category: "diagnostic"
+    # RAM Externa libre (Solo aplicable en chips ESP32 específicos con hardware adicional, ej: WROVER).
+    # ⚠️ Descomenta este bloque SOLO si descomentaste 'psram:' en tu archivo configuracion_base.
+    # psram:
+    #   name: "${friendly_name} PSRAM Libre"
+    #   id: debug_psram
+    #   entity_category: "diagnostic"
 
 # -----------------------------------------------------------------------------
 # TEXT SENSORS (Información y Telemetría Textual)
@@ -249,7 +249,9 @@ text_sensor:
     entity_category: "diagnostic"
     update_interval: 60s
     lambda: |-
-      return { ESPHOME_PROJECT_VERSION " " + App.get_compilation_time() };
+      char buffer[26];
+      App.get_build_time_string(buffer);
+      return { std::string(ESPHOME_PROJECT_VERSION) + " " + std::string(buffer) };
 
   # Nombre de sistema base
   - platform: template
@@ -270,13 +272,19 @@ text_sensor:
     icon: "mdi:alert"
     update_interval: never
 
+  # Sensor de texto que expone las alarmas en Home Assistant (Actualizado desde el script)
+  - platform: template
+    name: "${friendly_name} Alarmas Activas"
+    id: sensor_texto_alarmas
+    entity_category: "diagnostic"
+    icon: "mdi:alert-circle"
+
 # -----------------------------------------------------------------------------
 # BOTONES Y DEEP SLEEP
 # -----------------------------------------------------------------------------
 # Motor para dormir la placa para ahorro de energía máximo
 deep_sleep:
-  id: deep_sleep
-  run_duration: 0s
+  id: modo_deep_sleep
   sleep_duration: 24h
 
 button:
@@ -287,9 +295,10 @@ button:
     icon: "mdi:power"
     on_press:
       then:
-        - deep_sleep.enter: deep_sleep
+        - deep_sleep.enter: modo_deep_sleep
   # Reinicia la placa apagándola y volviéndola a encender limpia
   - platform: restart
+    id: boton_reinicio
     name: "${friendly_name} Reiniciar dispositivo"
     entity_category: "config"
   # Reinicia la placa sin encender integraciones pesadas para protegerla de boot-loops
@@ -304,13 +313,6 @@ button:
 # =============================================================================
 # --- MOTOR PRINCIPAL DE ALARMAS ---
 # =============================================================================
-
-  # Sensor de texto que expone las alarmas en Home Assistant (Actualizado desde el script)
-  - platform: template
-    name: "${friendly_name} Alarmas Activas"
-    id: sensor_texto_alarmas
-    entity_category: "diagnostic"
-    icon: "mdi:alert-circle"
 
 # -----------------------------------------------------------------------------
 # SCRIPTS Y TAREAS PROGRAMADAS
@@ -327,8 +329,13 @@ script:
           // 1. EVALUACIÓN DE ESTADO DE RED
           // ==========================================
           if (!id(estado_wifi_activo)) {
-            alarmas += "WiFi Desconectado, ";
-            if (gravedad_max < 3) gravedad_max = 3; // Grave
+            if (!id(wifi_provisioned)) {
+              alarmas += "Esperando Config. Inicial, ";
+              // No elevamos gravedad_max para no interferir con el parpadeo del Improv BLE
+            } else {
+              alarmas += "WiFi Desconectado, ";
+              if (gravedad_max < 3) gravedad_max = 3; // Grave
+            }
           } else if (id(estado_ap_activo)) {
             alarmas += "Modo AP Emergencia, ";
             if (gravedad_max < 3) gravedad_max = 3; // Grave
@@ -350,7 +357,7 @@ script:
           // ==========================================
           
           // A. Temperatura Interna (Usa #ifdef porque ESP8266 interrumpe el parsing)
-#ifdef USE_ESP32
+          #ifdef USE_ESP32
           if (id(internal_temp).has_state()) {
             if (id(internal_temp).state > ${umbral_temp_critica}) {
               alarmas += "Temp Crítica, ";
@@ -360,7 +367,7 @@ script:
               if (gravedad_max < 1) gravedad_max = 2;
             }
           }
-#endif
+          #endif
 
           // B. Uptime (Reiniciar cada 7 días = 604800s)
           if (id(uptime_s).has_state()) {
@@ -390,30 +397,30 @@ script:
           }
 
           // E. Frecuencia CPU (Exclusiva ESP32, detectada por hardware y substitution multi-placa)
-#ifdef USE_ESP32
+          #ifdef USE_ESP32
           if (id(debug_cpu_freq).has_state()) {
              if (id(debug_cpu_freq).state > ${umbral_cpu_freq_max}) {
                 alarmas += "Frec. CPU Límite Larga Duración, ";
                 if (gravedad_max < 2) gravedad_max = 2; // Moderado
              }
           }
-#endif
+          #endif
 
           // F. Motivo del Último Reinicio (String logic & WDT tolerance on 8266)
           if (id(debug_reset_reason).has_state()) {
             std::string rr = id(debug_reset_reason).state;
             // Filtramos razones normales
-            if (rr != "Power On" && rr != "Software reset CPU" && rr != "Vbat power on reset") {
-#ifdef USE_ESP8266
+            if (rr != "Power On" && rr != "Power-on reset" && rr != "Software reset CPU" && rr != "Vbat power on reset" && rr != "USB peripheral") {
+              #ifdef USE_ESP8266
               // En ESP8266 "Software WDT reset" es muy natural/habitual
               if (rr != "Software WDT reset") {
                 alarmas += "Reinicio por Error, ";
                 if (gravedad_max < 2) gravedad_max = 2;
               }
-#else
+              #else
               alarmas += "Reinicio por Error, ";
               if (gravedad_max < 2) gravedad_max = 2;
-#endif
+              #endif
             }
           }
 
@@ -450,10 +457,13 @@ script:
           
           if (gravedad_max >= 2) {
             ESP_LOGW("alarmas", "Nivel crítico/moderado: %s. Motivos: %s", texto_gravedad.c_str(), alarmas.c_str());
+            id(led_estado_sistema).turn_on(); // LED fijo al haber un error importante
           } else if (gravedad_max == 1) {
             ESP_LOGI("alarmas", "Nivel leve: %s. Motivos: %s", texto_gravedad.c_str(), alarmas.c_str());
+            id(led_estado_sistema).turn_off();
           } else {
             ESP_LOGI("alarmas", "Sistema OK. Ninguna alarma activa.");
+            id(led_estado_sistema).turn_off();
           }
 
           // Guardar el log interno y publicar en el sensor de texto en HA
