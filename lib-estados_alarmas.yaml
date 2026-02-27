@@ -1,30 +1,31 @@
-# alarmas_sistema.yaml
-# Paquete de sistema de alarmas para ESPHome Professional Packages
+# =============================================================================
+# 🚨 SUBSISTEMA DE ALARMAS Y TELEMETRÍA AVANZADA
+# =============================================================================
+# Descripción:
+#   Monitoriza silenciosamente la salud física (RAM, Temp, CPU) y lógica (WiFi, API)
+#   del chip. Asigna gravedades dinámicas y empuja notificaciones Push a tu móvil
+#   si hay peligro inminente de cuelgue o pérdida permanente de conexión.
+# =============================================================================
 
-  # --- NIVELES DE GRAVEDAD DE ALARMAS ---
-  # 0: Nada (Pues nada, todo bien)
-  # 1: Leve (Cosas informativas, no hay que hacer nada)
-  # 2: Moderado (Cosas no graves pero que hay que solucionar antes de que se conviertan en graves)
-  # 3: Grave (Hay que solucionar urgentemente, peligro de romper algo: software, hardware, sistema, etc.)
+# --- NIVELES DE GRAVEDAD DE ALARMAS ---
+# 0: Nada      (Sistema sano 100%)
+# 1: Leve      (Cosas informativas, caídas de rendimiento, sin acción inmediata)
+# 2: Moderado  (Peligro a medio plazo: calentamiento, WiFi perdiéndose, RAM fragmentada)
+# 3: Grave     (Peligro inminente: Sin WiFi prolongado, Hardware crítico, Cuelgue API)
 
-
-
-  # =========================================================================================
-  # UMBRALES DE HARDWARE POR DEFECTO 
-  # =========================================================================================
-
+# =========================================================================================
+# CONFIGURA AQUÍ: UMBRALES DE HARDWARE Y METAS POR DEFECTO
+# =========================================================================================
 substitutions:
-
-  # --- CONFIGURACIÓN DE NOTIFICACIONES ---
-  # Servicio de notificación en HA (ej: notify.notify, notify.mobile_app_iphone)
+  # -> CONFIGURA AQUÍ: A dónde lanzar las alertas Push (ej: notify.notify, notify.mobile_app_iphone)
   ha_notify_service: "notify.notify"
 
-  # --- UMBRALES CONFIGURABLES COMUNES ---
-  umbral_wifi_critico_pct: "30.0"      # % de señal WiFi crítica
-  umbral_wifi_debil_pct: "50.0"        # % de señal WiFi débil
-  umbral_temp_critica: "80.0"          # Celsius (Solo aplica si hay sensor de temp interna)
-  umbral_temp_elevada: "65.0"          # Celsius
-  umbral_uptime_max: "604800.0"        # Recomendación de reinicio en Segundos (7 días)
+  # -> CONFIGURA AQUÍ: Umbrales donde el chip empieza a quejarse
+  umbral_wifi_critico_pct: "30.0"      # % de calidad WiFi donde empieza a cortar paquetes (Gravedad 2)
+  umbral_wifi_debil_pct: "50.0"        # % de calidad WiFi donde la red va lenta (Gravedad 1)
+  umbral_temp_critica: "80.0"          # °C Temperatura donde el silicio sufre (Gravedad 3) - ESP32 ONLY
+  umbral_temp_elevada: "65.0"          # °C Temperatura límite normal (Gravedad 2) - ESP32 ONLY
+  umbral_uptime_max: "604800.0"        # Segundos sugeridos para auto-reiniciar y limpiar cachés (7 días)(Gravedad 1)
 
 
 interval:
@@ -55,13 +56,13 @@ globals:
 binary_sensor:
   # Indica si el dispositivo está conectado exitosamente a Home Assistant
   - platform: status
-    name: "${friendly_name} Estado HA"
+    name: "Estado HA"
     id: status_ha
     entity_category: "diagnostic"
 
   # Se activa (ON) si la placa ha perdido totalmente la conexión con el router WiFi
   - platform: template
-    name: "${friendly_name} Modo sin conexión"
+    name: "Modo sin conexión"
     id: modo_sin_conexion
     internal: true
     entity_category: "diagnostic"
@@ -70,7 +71,7 @@ binary_sensor:
 
   # Se activa (ON) si la placa no encontró WiFi y está emitiendo su propia red de rescate
   - platform: template
-    name: "${friendly_name} Modo AP"
+    name: "Modo AP"
     id: modo_ap
     internal: true
     entity_category: "diagnostic"
@@ -79,7 +80,7 @@ binary_sensor:
 
   # Se activa (ON) cuando la API nativa de ESPHome logra comunicarse con Home Assistant
   - platform: template
-    name: "${friendly_name} API conectada"
+    name: "API conectada"
     id: api_conectada
     internal: true
     entity_category: "diagnostic"
@@ -93,7 +94,7 @@ sensor:
   # --- 1. Red y WiFi ---
   # Fuerza de la señal WiFi bruta en decibelios. Oculto por defecto en la interfaz (internal: true)
   - platform: wifi_signal
-    name: "${friendly_name} Señal WiFi (dBm)"
+    name: "Señal WiFi (dBm)"
     id: wifi_rssi
     update_interval: 60s
     entity_category: "diagnostic"
@@ -102,7 +103,7 @@ sensor:
   # Convierte matemáticamente los dBm a un porcentaje (0% a 100%) más amigable para el usuario
   - platform: copy
     source_id: wifi_rssi
-    name: "${friendly_name} Señal WiFi (%)"
+    name: "Señal WiFi (%)"
     id: wifi_signal_percent
     unit_of_measurement: "%"
     accuracy_decimals: 0
@@ -113,7 +114,7 @@ sensor:
   # --- 2. Recursos de Hardware ---
   # Segundos puros desde el arranque. Usado internamente por el motor de alarmas para cálculos (internal: true)
   - platform: uptime
-    name: "${friendly_name} Uptime"
+    name: "Uptime"
     id: uptime_s
     unit_of_measurement: "s"
     accuracy_decimals: 0
@@ -123,7 +124,7 @@ sensor:
   # Temperatura del núcleo de silicio del chip ESP32 (No disponible en ESP8266)
   # ⚠️ ESP8266: Comenta o borra todo este bloque (de la línea 124 a la 129) si usas un ESP8266, o dará error de compilación.
   - platform: internal_temperature
-    name: "${friendly_name} Temperatura Interna"
+    name: "Temperatura Interna"
     id: internal_temp
     update_interval: 60s
     entity_category: "diagnostic"
@@ -131,39 +132,39 @@ sensor:
   - platform: debug
     # Velocidad del procesador. Sirve para detectar si la placa se queda bloqueada al máximo rendimiento
     cpu_frequency:
-      name: "${friendly_name} Frecuencia CPU"
+      name: "Frecuencia CPU"
       id: debug_cpu_freq
       entity_category: "diagnostic"
     # RAM disponible. Vital para asegurar que la placa no sufra un OutOfMemory y crashee
     free:
-      name: "${friendly_name} RAM Libre"
+      name: "RAM Libre"
       id: debug_ram
       entity_category: "diagnostic"
     # Bloque máximo de RAM contigua.
     block:
-      name: "${friendly_name} Bloque Máx RAM"
+      name: "Bloque Máx RAM"
       id: debug_block
       entity_category: "diagnostic"
     # Tiempo máximo que tarda en dar una vuelta el código.
     loop_time:
-      name: "${friendly_name} Tiempo de Loop Máximo"
+      name: "Tiempo de Loop Máximo"
       id: debug_loop
       entity_category: "diagnostic"
     # Mínima RAM libre histórica desde el arranque. Útil para detectar fugas de memoria (Memory Leaks).
     # ⚠️ ESP8266: Comenta o borra este bloque 'min_free' (solo ESP32 / LibreTiny)
     min_free:
-      name: "${friendly_name} RAM Libre Mínima"
+      name: "RAM Libre Mínima"
       id: debug_min_free
       entity_category: "diagnostic"
     # Nivel de fragmentación de la memoria RAM (0% es limpio, >50% puede fallar reservando memoria).
     fragmentation:
-      name: "${friendly_name} RAM Fragmentación"
+      name: "RAM Fragmentación"
       id: debug_fragmentation
       entity_category: "diagnostic"
     # RAM Externa libre (Solo aplicable en chips ESP32 específicos con hardware adicional, ej: WROVER).
     # ⚠️ Descomenta este bloque SOLO si descomentaste 'psram:' en tu archivo configuracion_base.
     # psram:
-    #   name: "${friendly_name} PSRAM Libre"
+    #   name: "PSRAM Libre"
     #   id: debug_psram
     #   entity_category: "diagnostic"
 
@@ -174,7 +175,7 @@ text_sensor:
   # --- 1. Información de Conectividad y Red ---
   # Resumen legible del estado ("Modo AP", "Sin conexión", "No API", "Conectado")
   - platform: template
-    name: "${friendly_name} Estado conexión"
+    name: "Estado conexión"
     id: estado_conexion
     entity_category: "diagnostic"
     update_interval: 15s
@@ -187,28 +188,28 @@ text_sensor:
   # Información física del chip en la red de tu casa
   - platform: wifi_info
     ip_address:
-      name: "${friendly_name} IP actual"
+      name: "IP actual"
       entity_category: "diagnostic"
     ssid:
-      name: "${friendly_name} AP SSID"
+      name: "AP SSID"
       entity_category: "diagnostic"
     bssid:
-      name: "${friendly_name} MAC del AP"
+      name: "MAC del AP"
       entity_category: "diagnostic"
     mac_address:
-      name: "${friendly_name} MAC"
+      name: "MAC"
       entity_category: "diagnostic"
 
   # --- 2. Información del Sistema y Compilación ---
   # Muestra la versión del framework base (Ej: 2024.2.1)
   - platform: version
-    name: "${friendly_name} Versión ESPHome"
+    name: "Versión ESPHome"
     hide_timestamp: true
     entity_category: "diagnostic"
 
   # Uptime convertido de Segundos puros a texto humano ("1d 5h 30m 10s")
   - platform: template
-    name: "${friendly_name} Tiempo de Actividad"
+    name: "Tiempo de Actividad"
     icon: "mdi:clock-outline"
     entity_category: "diagnostic"
     internal: false
@@ -232,18 +233,18 @@ text_sensor:
   - platform: debug
     # Expone físicamente la última causa de reinicio ("Power On", "Software Reset", "Brownout", etc) de forma legible
     reset_reason:
-      name: "${friendly_name} Motivo último reinicio"
+      name: "Motivo último reinicio"
       id: debug_reset_reason
       entity_category: "diagnostic"
     # Exposición altísima de telemetría de sistema: Free heap size al inicio, características físicas del chip embebido...
     device:
-      name: "${friendly_name} Información Dispositivo"
+      name: "Información Dispositivo"
       entity_category: "diagnostic"
 
 
   # Versión del proyecto + Fecha y Hora exacta en la que se flasheó la placa
   - platform: template
-    name: "${friendly_name} ESPHome Project Version Detailed"
+    name: "ESPHome Project Version Detailed"
     id: esphome_project_version_text_detailed
     icon: "mdi:information-box"
     entity_category: "diagnostic"
@@ -255,7 +256,7 @@ text_sensor:
 
   # Nombre de sistema base
   - platform: template
-    name: "${friendly_name} ESPHome Project Name"
+    name: "ESPHome Project Name"
     id: esphome_project_name
     icon: "mdi:information-box"
     entity_category: "diagnostic"
@@ -266,7 +267,7 @@ text_sensor:
   # --- 3. Telemetría de Alarmas ---
   # Texto en Home Assistant donde el cerebro avisa ("Nada", "Leve", "Moderado", "Grave")
   - platform: template
-    name: "${friendly_name} Estado de Gravedad"
+    name: "Estado de Gravedad"
     id: sensor_gravedad_texto
     entity_category: "diagnostic"
     icon: "mdi:alert"
@@ -274,7 +275,7 @@ text_sensor:
 
   # Sensor de texto que expone las alarmas en Home Assistant (Actualizado desde el script)
   - platform: template
-    name: "${friendly_name} Alarmas Activas"
+    name: "Alarmas Activas"
     id: sensor_texto_alarmas
     entity_category: "diagnostic"
     icon: "mdi:alert-circle"
@@ -290,7 +291,7 @@ deep_sleep:
 button:
   # Duerme la placa forzosamente usando el motor deep_sleep configurado arriba
   - platform: template
-    name: "${friendly_name} Apagar (deep sleep)"
+    name: "Apagar (deep sleep)"
     entity_category: "config"
     icon: "mdi:power"
     on_press:
@@ -299,15 +300,15 @@ button:
   # Reinicia la placa apagándola y volviéndola a encender limpia
   - platform: restart
     id: boton_reinicio
-    name: "${friendly_name} Reiniciar dispositivo"
+    name: "Reiniciar dispositivo"
     entity_category: "config"
   # Reinicia la placa sin encender integraciones pesadas para protegerla de boot-loops
   - platform: safe_mode
-    name: "${friendly_name} Reiniciar en modo seguro"
+    name: "Reiniciar en modo seguro"
     entity_category: "diagnostic"
   # Borra todo rastro del WiFi y credenciales de la memoria 
   - platform: factory_reset
-    name: "${friendly_name} Restablecer a fábrica"
+    name: "Restablecer a fábrica"
     entity_category: "config"
 
 # =============================================================================
@@ -396,17 +397,7 @@ script:
             }
           }
 
-          // E. Frecuencia CPU (Exclusiva ESP32, detectada por hardware y substitution multi-placa)
-          #ifdef USE_ESP32
-          if (id(debug_cpu_freq).has_state()) {
-             if (id(debug_cpu_freq).state > ${umbral_cpu_freq_max}) {
-                alarmas += "Frec. CPU Límite Larga Duración, ";
-                if (gravedad_max < 2) gravedad_max = 2; // Moderado
-             }
-          }
-          #endif
-
-          // F. Motivo del Último Reinicio (String logic & WDT tolerance on 8266)
+          // E. Motivo del Último Reinicio (String logic & WDT tolerance on 8266)
           if (id(debug_reset_reason).has_state()) {
             std::string rr = id(debug_reset_reason).state;
             // Filtramos razones normales

@@ -1,69 +1,104 @@
-# lib-wifi_conectividad.yaml
-# Uso: packages: wifi: !include lib/lib-wifi_conectividad.yaml
-# Requiere: friendly_name; secrets: admin
-#
-# Incluye: Motor de red híbrido (WiFi, Modo AP fallback, Improv BLE, Improv Serial, Web Server)
-# y telemetría de monitoreo continuo de conexión.
+# =============================================================================
+# 🌐 MOTOR HÍBRIDO DE CONECTIVIDAD: WIFI + IMPROV BLE + AP RESCATE
+# =============================================================================
+# Descripción: 
+#   Gestiona inteligentemente la conexión del dispositivo. Inicialmente levanta 
+#   Bluetooth Low Energy (Improv) para que el dueño pase la clave del WiFi por
+#   la app de Home Assistant. Si ya tiene clave pero pierde el WiFi, espera 15 min 
+#   y levanta una red abierta de rescate (Modo AP) para reconfiguración manual.
+# =============================================================================
 
-# --- Constantes (editar aquí para cambiar valores por defecto del sistema) ---
+# -----------------------------------------------------------------------------
+# CONSTANTES DE RED (Puedes modificar estos comportamientos si lo necesitas)
+# -----------------------------------------------------------------------------
 substitutions:
-  # Contraseña para la red WiFi de emergencia (Fallback AP)
-  ap_password: "0123456789"
-  # Contraseña para la interfaz web local de rescate (usuario: admin)
-  web_server_password: "0123456789"
-  intervalo_chequeo: 15s # Frecuencia de chequeo del estado de red
-  tiempo_activar_ap: "3min"  # Tiempo sin WiFi antes de levantar la antena local de rescate (Nativo de ESPHome)
-  umbral_reiniciar_api: "20" # 20 chequeos de 15s = 5 minutos sin Home Assistant para forzar un reinicio
+  # -> CONFIGURA AQUÍ: Claves de emergencia
+  ap_password: "0123456789"         # Clave de la red WiFi emitida por el dispositivo si fracasa todo
+  web_server_password: "0123456789" # Clave del portal web local (El usuario siempre es: admin)
+  
+  # -> CONFIGURA AQUÍ: Tiempos de reacción (Cuidado: valores muy agresivos colapsan la placa)
+  intervalo_chequeo: 15s        # Cada cuántos segundos el Cerebro revisa si sigue conectado a internet
+  umbral_reiniciar_api: "240"   # Número de chequeos perdidos para reiniciar: 240 x 15s = 1 hora (3600s)
 
 # -----------------------------------------------------------------------------
 # MOTOR PRINCIPAL WIFI
 # -----------------------------------------------------------------------------
 wifi:
   id: componente_wifi
-  # enable_on_boot: false  <- ELIMINADO: Improv BLE necesita que el radio WiFi esté encendido para escanear redes.
-  power_save_mode: none
-  # fast_connect: true (Desactivado al no tener redes pre-configuradas)
-  reboot_timeout: 0s
-  output_power: 20dBm
+  # enable_on_boot DEBE estar habilitado implícitamente, Improv BLE USA el chip WiFi de fondo
+  power_save_mode: none     # Mejora radicalmente la velocidad de respuesta apagando el ahorro energético de antena
+  reboot_timeout: 0s        # EVITA reinicios nativos ciegos, nuestro script de la línea 143 se encarga de esto con cabeza.
+  output_power: 20dBm       # Potencia de emisión máxima (Cuidado en zonas muy saturadas)
   
-  # Red de emergencia (Fallback AP) si desaparecen las credenciales
+  # Red de emergencia (Fallback AP). Se enciende DENTRO del script de la línea 176 tras 15 minutos sin WiFi
   ap:
     password: "${ap_password}"
-    ap_timeout: ${tiempo_activar_ap}
-    # IP fija del AP para conexiones más estables (ajusta a tu red si hace falta)
+    # ap_timeout desactivado deliberadamente. El chip de una ESP32-C3 entra en pánico 
+    # si intenta emitir Improv Bluetooth y un Access Point WiFi por la misma antena a la vez.
+    
+    # Rango IP de estabilidad (Tu móvil recibirá una IP 192.168.4.x para ajustar la placa)
     manual_ip:
       static_ip: 192.168.4.1
       gateway: 192.168.4.1
       subnet: 255.255.255.0
 
 # -----------------------------------------------------------------------------
-# PORTALES DE CONEXIÓN AL CONSUMIDOR (Improv & Web Server)
+# PORTALES DE CONFIGURACIÓN INICIAL DEL USUARIO
 # -----------------------------------------------------------------------------
-# Improv por Bluetooth (Solo ESP32 / ESP32-C3)
+
+# 1. Improv por Bluetooth (Solo para placa Virgen, se duerme cuando consigue WiFi)
+esp32_ble:
 esp32_improv:
   status_indicator: led_estado_sistema
-  authorizer: none
-  wifi_timeout: 5s        # Sin espera: arranca Improv al instante si no hay WiFi
+  authorizer: none        # Sin botón físico requerido, emparejamiento libre pero cercano
+  wifi_timeout: 5s        # Inicia Improv super rápido apenas se da cuenta de que no hay WiFi base configurado
   next_url: "https://my.home-assistant.io/redirect/config_flow_start?domain=esphome"
+  
   on_start:
     then:
-      - logger.log: "Improv BLE: esperando autorización / autorizado"
+      - logger.log: "Improv BLE: Esperando App Móvil o PC"
   on_provisioning:
     then:
-      - logger.log: "Improv BLE: provisionando WiFi..."
+      - logger.log: "Improv BLE: Recibiendo credenciales e inyectándolas en NVS Flash..."
   on_provisioned:
     then:
-      - logger.log: "Improv BLE: WiFi configurado correctamente"
+      - logger.log: "Improv BLE: ¡Éxito cruzando el apretón de manos!"
       - lambda: |-
-          id(wifi_provisioned) = true;
+          id(wifi_provisioned) = true; // Graba a fuego que la placa ya no es virgen
       - homeassistant.service:
           service: notify.persistent_notification
           data:
-            title: "🟢 Dispositivo provisionado"
-            message: "El dispositivo se conectó al WiFi por primera vez via BLE Improv."
+            title: "🟢 Dispositivo Conectado a la Red"
+            message: "El hardware se provisionó correctamente vía BLE Improv."
   on_stop:
     then:
-      - logger.log: "Improv BLE: detenido"
+      - logger.log: "Improv BLE: detenido permanentemente"
+
+  # Telemetría Avanzada: Loggea cada vez que cambia el estado interno o hay un error
+  on_state:
+    then:
+      - lambda: |-
+          // Loggear el estado principal del motor
+          switch (state) {
+            case improv::STATE_STOPPED:
+              ESP_LOGD("improv", "Estado C++: STATE_STOPPED (Motor Detenido)"); break;
+            case improv::STATE_PROVISIONING:
+              ESP_LOGD("improv", "Estado C++: STATE_PROVISIONING (Recibiendo datos de red...)"); break;
+            case improv::STATE_PROVISIONED:
+              ESP_LOGD("improv", "Estado C++: STATE_PROVISIONED (¡Conexión Exitosa!)"); break;
+          }
+          
+          // Loggear si HA detectó algún error al pasar la clave
+          if (error != improv::ERROR_NONE) {
+            switch(error) {
+              case improv::ERROR_UNABLE_TO_CONNECT:
+                ESP_LOGE("improv", "Error BLE: No ha podido conectar al WiFi (Clave incorrecta / Lejos del router)"); break;
+              case improv::ERROR_NOT_AUTHORIZED:
+                ESP_LOGE("improv", "Error BLE: El dispositivo cliente no está autorizado"); break;
+              default:
+                ESP_LOGE("improv", "Error BLE Desconocido o RPC Inválido (Código: %d)", error); break;
+            }
+          }
 
 # Improv por Serial (configuración WiFi por USB)
 # improv_serial:
@@ -104,6 +139,10 @@ globals:
     initial_value: "false"
 
   # --- Contadores de fallos ---
+  - id: tiempo_sin_wifi_seg
+    type: int
+    restore_value: false
+    initial_value: "0"
   - id: intentos_sin_api
     type: int
     restore_value: false
@@ -139,9 +178,42 @@ script:
 
 
       # ========================================================
-      # 2. LÓGICA DE RECUPERACIÓN (API ONLY, WiFi es Nativo)
+      # 2. LÓGICA DE RECUPERACIÓN CONDICIONAL (AP & API)
       # ========================================================
 
+      # --- Lógica AP Fallback Inteligente (cada 15min) ---
+      - if:
+          condition:
+            - not: wifi.connected
+            - lambda: "return id(wifi_provisioned);"
+          then:
+            - lambda: "id(tiempo_sin_wifi_seg) += 15;"
+            # Encender AP a los 15 minutos exactos de caerse el wifi
+            - if:
+                condition:
+                  lambda: "return id(tiempo_sin_wifi_seg) == 900;"
+                then:
+                  - logger.log: "15 min sin WiFi principal. Activando Modo AP de rescate."
+                  - wifi.ap.enable:
+            # Reintentar conectarse al router cada 15 min estando en AP
+            - if:
+                condition:
+                  lambda: "return id(tiempo_sin_wifi_seg) >= 1800;"
+                then:
+                  - logger.log: "Ciclo de 15 min en Modo AP cumplido. Apagando red temporal e intentando reconectar al WiFi de casa..."
+                  - wifi.ap.disable:
+                  - wifi.disable:
+                  - delay: 2s
+                  - wifi.enable:
+                  - lambda: "id(tiempo_sin_wifi_seg) = 0;" # Resetea el reloj a 0 para el siguiente intento
+          else:
+            - lambda: "id(tiempo_sin_wifi_seg) = 0;"
+            # Si el WiFi vuelve (o si estamos en primer arranque virgen Improv), asegurar que el AP este apagado
+            - if:
+                condition:
+                  lambda: "return id(componente_wifi).is_ap_active();"
+                then:
+                  - wifi.ap.disable:
 
       # --- Fallo de API (con WiFi activo) ---
       - if:
@@ -165,7 +237,7 @@ script:
 # -----------------------------------------------------------------------------
 button:
   - platform: template
-    name: "${friendly_name} Reconectar WiFi"
+    name: "Reconectar WiFi"
     icon: "mdi:wifi-refresh"
     on_press:
       then:
@@ -181,6 +253,7 @@ output:
   # Salida genérica para controlar el LED integrado de la placa según el perfil
   - platform: gpio
     id: led_estado_sistema
+    internal: true
     pin:
       number: ${pin_led_estado}
       inverted: ${pin_led_invertido}

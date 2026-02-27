@@ -1,34 +1,34 @@
 # =============================================================================
-######################### CONFIGURACIÓN BASE ESPHome ##########################
+# 📦 ESPHome Professional Packages - INSTRUCCIONES DE USO
 # =============================================================================
-
-# 1. PEGA AQUÍ LA CONFIGURACIÓN BÁSICA DE TU PLACA
-# =============================================================================
-# INSTRUCCIONES:
-# 1. Sube las librerías a la carpeta lib/ de tu Home Assistant como dicta el README.
-# 2. Crea un "New Device" en ESPHome y dale a instalar.
-# 3. Borra el código generado, copia todo este archivo y pégalo.
-# =============================================================================
-
+# 1. Sube la carpeta "lib/" (que contiene los archivos .yaml) a tu 
+#    servidor Home Assistant dentro de la carpeta /config/esphome/
+# 2. Crea un "New Device" en ESPHome y dale a instalar para que genere las keys.
+# 3. Borra el código generado por defecto, copia todo este archivo y pégalo.
+# 4. Modifica EXCLUSIVAMENTE las secciones marcadas como "CONFIGURA AQUÍ".
 # =============================================================================
 
 # =============================================================================
-# IDENTIFICACIÓN DEL NÚCLEO (No es necesario tocar excepto 'name')
+# 1. IDENTIFICACIÓN DEL NÚCLEO (Solo modificar 'name', 'friendly_name', 'project')
 # =============================================================================
 esphome:
-  # Nombre interno en minúsculas y sin espacios (Ej: "sensor-salon")
+  # -> CONFIGURA AQUÍ: Nombre interno a nivel de programación (ej: "luz-comedor")
   name: poner-nombre-de-dispositivo
   
-  # Nombre interno por defecto. IMPORTANTE: Para renombrar el dispositivo una vez 
-  # integrado en la casa, ¡hazlo desde los ajustes ⚙️ de la app de Home Assistant! 
-  # No hace falta editar este archivo ni volver a compilar.
+  # -> CONFIGURA AQUÍ: Nombre amigable (ej: "Luz Comedor Principal")
+  # IMPORTANTE: Si integras el dispositivo en Home Assistant, renómbralo
+  # desde los ajustes de la propia app de HA. ¡No cambies esto de nuevo aquí!
   friendly_name: ${friendly_name}
   
-  # Añadir la dirección MAC al nombre para evitar conflictos si tienes varias placas iguales
+  # Añade la dirección MAC física al nombre. Vital si produces placas en masa ("luz-comedor-1AFF42")
   name_add_mac_suffix: true
+  
+  # Requiere al menos esta versión de ESPHome para compilar los scripts modernos
   min_version: "2026.2.1"
+  
   project:
-    name: "poner-nombre-de-proyecto"
+    # -> CONFIGURA AQUÍ: Desde v2026 es OBLIGATORIO usar un namespace (autor.dispositivo)
+    name: "mi_casa.dispositivo_nuevo"
     version: ${version}
     on_update:
       - logger.log:
@@ -50,60 +50,65 @@ preferences:
   flash_write_interval: 1s
 
 # -----------------------------------------------------------------------------
-# CONFIGURACIÓN DE PLACA (Pega la que generó ESPHome o descomenta SOLO UNA)
+# 2. SELECCIÓN DE HARDWARE (Descomenta ÚNICAMENTE el bloque de tu placa)
 # -----------------------------------------------------------------------------
 
-# --- OPCIÓN 1: ESP32 estándar (DevKitC, NodeMCU-32S, etc.) ---
+# ❌ OPCIÓN 1: ESP32 Estándar (WROOM-32, DevKitC, NodeMCU-32S) 
+# -> Instrucciones: Quita todas las almohadillas (#) a la izquierda de estas 12 líneas
 # esp32:
 #   board: esp32dev
 #   framework:
 #     type: arduino
-# psram:                       # <--- Descomentar si tu modelo ESP32 (WROVER, etc...) tiene PSRAM física.
+# psram:                       # <- Solo si tu chip tiene PSRAM externa real
 # substitutions:
-#   friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
-#   version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
-#   pin_led_estado: "2"          # <--- Pin del LED integrado (ESP32 normal suele ser 2)
-#   pin_led_invertido: "false"
-#   umbral_ram_grave: "20000"
+#   friendly_name: "Sin Configurar"    
+#   version: "0.0.1"             # <- Vuelca aquí el versionado de tu proyecto
+#   pin_led_estado: "2"          # <- Pin del LED físico integrado azul (Suele ser 2 o 1)
+#   pin_led_invertido: "false"   # <- Enciende cuando hay voltaje (High)
+#   umbral_ram_grave: "20000"    # <- Bytes de RAM libres antes de entrar en pánico crítico
 #   umbral_ram_moderada: "50000"
-#   umbral_loop_time: "500"
-#   umbral_cpu_freq_max: "239000000"
+#   umbral_loop_time: "500"      # <- Milisegundos de latencia antes de quejarse de lentitud
 
-# --- OPCIÓN 2: ESP32-C3 Super Mini (Por Defecto) ---
+# ✅ OPCIÓN 2: ESP32-C3 Super Mini (ACTIVADO POR DEFECTO)
+# -> Instrucciones: Arquitectura RISC-V compacta de alto rendimiento.
 esp32:
   board: esp32-c3-devkitm-1
   framework:
     type: esp-idf
 substitutions:
-  friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
-  version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
-  pin_led_estado: "8"          # <--- Pin del LED integrado (ESP32-C3 Super Mini suele ser 8)
-  pin_led_invertido: "true"    # <--- true si el LED enciende en pulso bajo (Super Mini es Invertido)
+  friendly_name: "Sin Configurar"    
+  version: "0.0.1"             
+  pin_led_estado: "8"          # <- Pin del LED azul (8 en la Super Mini)
+  pin_led_invertido: "true"    # <- Enciende cuando se corta el voltaje (Low - Invertido)
   umbral_ram_grave: "20000"
   umbral_ram_moderada: "50000"
   umbral_loop_time: "500"
-  umbral_cpu_freq_max: "161000000"
 
-# --- OPCIÓN 3: ESP8266 (D1 Mini, NodeMCU, etc.) ---
+# ❌ OPCIÓN 3: Familia ESP8266 (wemos D1 Mini, NodeMCU v2/v3, Sonoff)
+# -> Instrucciones: Quita todas las almohadillas (#) a la izquierda de estas líneas
+# -> OJO: Ve al componente 'sensor' en lib-estados_alarmas.yaml y BORRA 'internal_temperature' 
+# -> porque el ESP8266 no tiene sensor térmico interno físico, o dará error de compilación.
 # esp8266:
 #   board: d1_mini
 # substitutions:
-#   friendly_name: "Sin Configurar"    # (Se renombra luego desde los ajustes de Home Assistant)
-#   version: "0.0.1"             # <--- CAMBIA LA VERSIÓN AQUÍ
-#   pin_led_estado: "2"          # <--- Pin del LED integrado (NodeMCU/D1 Mini suele ser 2)
-#   pin_led_invertido: "true"    # <--- NodeMCU enciede con LOW
-#   umbral_ram_grave: "8000"
+#   friendly_name: "Sin Configurar"   
+#   version: "0.0.1"             
+#   pin_led_estado: "2"          # <- Pin del LED azul
+#   pin_led_invertido: "true"    # <- Enciende cuando se corta el voltaje al igual que C3
+#   umbral_ram_grave: "8000"     # <- El ESP8266 tiene menos RAM por diseño, los umbrales bajan
 #   umbral_ram_moderada: "15000"
 #   umbral_loop_time: "1000"
-#   umbral_cpu_freq_max: "159000000"
 
+# =============================================================================
+# 3. MOTORES NATIVOS Y SERVICIOS ESPHOME (No editar a menos que seas avanzado)
+# =============================================================================
 logger:
 
 debug:
 
 api:
   # Borrada la encriptación manual de la API, se usa el emparejamiento interno nativo.
-  reconnect_timeout: 0s
+  reboot_timeout: 0s
 
 ota:
   - platform: esphome
